@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Табель — неделя{% endblock %}
+{% block content %}
+<h1 class="h5 mb-3">Табель — неделя {{ week_start|date:"d.m.Y" }}–{{ week_end|date:"d.m.Y" }}</h1>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <input type="date" class="form-control" name="week" value="{{ request.GET.week }}">
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-secondary">Показать</button>
+  </div>
+</form>
+
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Сотрудник</th>
+          {% for d in days %}<th class="text-center">{{ d|date:"D d.m" }}</th>{% endfor %}
+          <th class="text-end">Итого</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.employee.full_name }}</td>
+            {% for cell in row.cells %}
+              <td class="text-center" style="width:110px;">
+                <input class="form-control form-control-sm text-center" style="max-width:90px"
+                       name="hours_{{ row.employee.id }}_{{ forloop.counter0 }}" value="{{ cell.hours|default:"0" }}">
+              </td>
+            {% endfor %}
+            <td class="text-end">{{ row.total|default:"0" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div><button class="btn btn-primary">Сохранить табель</button></div>
+</form>
+{% endblock %}

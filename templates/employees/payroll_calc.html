@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Расчёт ЗП{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Расчёт зарплаты</h1>
+<div class="row g-3">
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="small text-muted">Выручка</div><div class="h4 m-0">{{ revenue }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="small text-muted">Кухня ({{ settings.kitchen_percent }}%)</div><div class="h4 m-0">{{ kitchen }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="small text-muted">Сервис ({{ settings.service_percent }}%)</div><div class="h4 m-0">{{ service }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="small text-muted">Итого ФОТ</div><div class="h4 m-0">{{ kitchen|add:service }}</div></div></div>
+</div>
+{% endblock %}

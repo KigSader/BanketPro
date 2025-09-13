@@ -1,20 +1,25 @@
 {% extends 'base.html' %}
 {% block title %}Меню — блюда{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Блюда</h1>
+<h1 class="h4 mb-3">Меню</h1>
 <div class="d-flex gap-2 mb-3">
   <a class="btn btn-primary" href="{% url 'menuapp:dish_create' %}">+ Блюдо</a>
   <a class="btn btn-outline-primary" href="{% url 'menuapp:dishgroup_create' %}">+ Группа блюд</a>
   <a class="btn btn-outline-primary" href="{% url 'menuapp:clientmenu_create' %}">+ Меню для клиента</a>
 </div>
-<table class="table table-sm bg-white">
-  <thead><tr><th>Название</th><th>Группа</th><th>Порция, г</th></tr></thead>
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>Блюдо</th><th>Группа</th><th class="text-end">Цена</th><th>ТТК</th></tr></thead>
   <tbody>
-    {% for d in object_list %}
-      <tr><td>{{ d.name }}</td><td>{{ d.group }}</td><td>{{ d.serving_weight }}</td></tr>
-    {% empty %}
-      <tr><td colspan="3" class="text-muted">Пусто</td></tr>
-    {% endfor %}
+  {% for d in object_list %}
+    <tr>
+      <td>{{ d.name }}</td>
+      <td>{{ d.group|default:"—" }}</td>
+      <td class="text-end">{{ d.price|default:"0" }}</td>
+      <td>{% if d.techcard %}<a href="{% url 'warehouse:techcard_detail' d.techcard.pk %}">{{ d.techcard.title }}</a>{% else %}—{% endif %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4" class="text-muted">Добавьте блюда</td></tr>
+  {% endfor %}
   </tbody>
 </table>
 {% endblock %}

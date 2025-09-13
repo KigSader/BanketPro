@@ -1,7 +1,7 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic
 from django.utils import timezone
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 from datetime import date, timedelta
 from calendar import monthrange
 from .models import Client
@@ -12,9 +12,11 @@ class ClientListView(LoginRequiredMixin, generic.ListView):
     model = Client
     paginate_by = 20
     template_name = 'crm/client_list.html'
+
     def get_queryset(self):
         qs = super().get_queryset().order_by('-created_at')
-        q = self.request.GET.get('q'); event_date = self.request.GET.get('event_date')
+        q = self.request.GET.get('q');
+        event_date = self.request.GET.get('event_date')
         if q:
             qs = qs.filter(Q(full_name__icontains=q) | Q(phone__icontains=q))
         if event_date:
@@ -28,6 +30,12 @@ class ClientCreateView(LoginRequiredMixin, generic.CreateView):
     success_url = '/crm/clients/'
     template_name = 'crm/client_form.html'
 
+class ClientDetailView(LoginRequiredMixin, generic.DetailView):
+    model = Client; template_name = 'crm/client_detail.html'
+    def get_context_data(self, **kw):
+        ctx = super().get_context_data(**kw)
+        ctx['events'] = self.object.event_set.select_related('hall').order_by('-date','slot')
+        return ctx
 
 class DashboardView(LoginRequiredMixin, generic.TemplateView):
     template_name = 'crm/dashboard.html'
@@ -89,3 +97,5 @@ class DashboardView(LoginRequiredMixin, generic.TemplateView):
             'next_year': next_year, 'next_month': next_month,
         })
         return ctx
+
+
