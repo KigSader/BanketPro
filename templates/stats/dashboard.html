@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% block title %}Статистика{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Статистика</h1>
+<form class="row g-2 mb-3">
+  <div class="col-auto"><input type="date" class="form-control" name="date_from" value="{{ date_from }}"></div>
+  <div class="col-auto"><input type="date" class="form-control" name="date_to" value="{{ date_to }}"></div>
+  <div class="col-auto"><button class="btn btn-outline-secondary">Фильтр</button></div>
+</form>
+<div class="row g-3">
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted small">Выручка</div><div class="h4 m-0">{{ revenue }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted small">Расходы</div><div class="h4 m-0">{{ expenses }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted small">Зарплаты (кух {{ kitchen_pct }}%, сервис {{ service_pct }}%)</div><div class="h4 m-0">{{ kitchen|add:service }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3 shadow-sm"><div class="text-muted small">Прибыль</div><div class="h4 m-0">{{ profit }}</div></div></div>
+</div>
+{% endblock %}

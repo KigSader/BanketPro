@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Клиенты{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Клиенты</h1>
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-4"><input type="search" class="form-control" name="q" placeholder="ФИО или телефон" value="{{ request.GET.q }}"></div>
+  <div class="col-md-3"><input type="date" class="form-control" name="event_date" value="{{ request.GET.event_date }}"></div>
+  <div class="col-md-2"><button class="btn btn-outline-primary w-100">Искать</button></div>
+  <div class="col-md-3 text-end"><a class="btn btn-primary" href="{% url 'crm:client_create' %}">+ Добавить клиента</a></div>
+</form>
+<table class="table table-sm align-middle bg-white">
+  <thead><tr><th>ФИО</th><th>Телефон</th><th>Источник</th><th>Создан</th></tr></thead>
+  <tbody>
+    {% for c in object_list %}
+      <tr>
+        <td>{{ c.full_name }}</td>
+        <td>{{ c.phone }}</td>
+        <td>{{ c.source|default:"—" }}</td>
+        <td>{{ c.created_at|date:"d.m.Y H:i" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-muted">Пусто</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

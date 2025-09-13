@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% block title %}Расходы{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Расходы</h1>
+<form class="row g-2 mb-3">
+  <div class="col-auto"><input type="date" class="form-control" name="date_from" value="{{ request.GET.date_from }}"></div>
+  <div class="col-auto"><input type="date" class="form-control" name="date_to" value="{{ request.GET.date_to }}"></div>
+  <div class="col-auto">
+    <select name="type" class="form-select">
+      <option value="">Тип</option>
+      {% for k,v in object_list.model.TYPES %}<option value="{{ k }}" {% if request.GET.type == k %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-secondary">Фильтр</button></div>
+  <div class="col ms-auto text-end">
+    <a class="btn btn-primary" href="{% url 'expenses:expense_create' %}">+ Добавить расход</a>
+    <a class="btn btn-outline-success" href="?{% if request.META.QUERY_STRING %}{{ request.META.QUERY_STRING }}&{% endif %}export=csv">Экспорт CSV</a>
+  </div>
+</form>
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>Дата</th><th>Тип</th><th class="text-end">Сумма</th><th>Комментарий</th></tr></thead>
+  <tbody>
+    {% for e in object_list %}
+      <tr><td>{{ e.date|date:"d.m.Y" }}</td><td>{{ e.get_type_display }}</td><td class="text-end">{{ e.amount }}</td><td>{{ e.note }}</td></tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-muted">Нет данных</td></tr>
+    {% endfor %}
+  </tbody>
+  <tfoot><tr><th colspan="2">Итого</th><th class="text-end">{{ total }}</th><th></th></tr></tfoot>
+</table>
+{% endblock %}

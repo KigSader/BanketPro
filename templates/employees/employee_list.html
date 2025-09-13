@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Сотрудники{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Сотрудники</h1>
+<div class="mb-3">
+  <a class="btn btn-primary" href="{% url 'employees:employee_create' %}">+ Добавить сотрудника</a>
+</div>
+<table class="table table-sm bg-white">
+  <thead><tr><th>ФИО</th><th>Телефон</th><th>Должность</th></tr></thead>
+  <tbody>
+    {% for e in object_list %}
+      <tr><td>{{ e.full_name }}</td><td>{{ e.phone|default:"—" }}</td><td>{{ e.position|default:"—" }}</td></tr>
+    {% empty %}
+      <tr><td colspan="3" class="text-muted">Пусто</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

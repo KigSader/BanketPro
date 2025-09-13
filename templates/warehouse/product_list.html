@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% block title %}Склад — номенклатура{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Номенклатура</h1>
+<form class="row g-2 mb-3">
+  <div class="col-auto"><input class="form-control" name="q" placeholder="Поиск..." value="{{ request.GET.q }}"></div>
+  <div class="col-auto"><button class="btn btn-outline-secondary">Искать</button></div>
+  <div class="col ms-auto text-end">
+    <a class="btn btn-primary" href="{% url 'warehouse:product_create' %}">+ Товар</a>
+    <a class="btn btn-outline-primary" href="{% url 'warehouse:stockin_create' %}">Приход</a>
+    <a class="btn btn-outline-danger" href="{% url 'warehouse:stockmove_create' %}">Списание</a>
+    <a class="btn btn-outline-secondary" href="{% url 'warehouse:inventory_create' %}">Инвентаризация</a>
+  </div>
+</form>
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>Товар</th><th>Ед.</th><th class="text-end">Остаток</th><th class="text-end">Цена</th><th class="text-end">Стоимость остатка</th></tr></thead>
+  <tbody>
+  {% for p in object_list %}
+    <tr>
+      <td>{{ p.name }}</td><td>{{ p.unit }}</td>
+      <td class="text-end">{{ p.stock_qty }}</td>
+      <td class="text-end">{{ p.last_price }}</td>
+      <td class="text-end">{{ p.stock_value }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-muted">Нет данных</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot><tr><th colspan="4">Итого</th><th class="text-end">{{ stock_value }}</th></tr></tfoot>
+</table>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Мероприятие{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Мероприятие на {{ object.date }} • {{ object.get_slot_display }}</h1>
+<div class="card shadow-sm"><div class="card-body">
+  <dl class="row">
+    <dt class="col-sm-3">Клиент</dt><dd class="col-sm-9">{{ object.client }} </dd>
+    <dt class="col-sm-3">Зал</dt><dd class="col-sm-9">{{ object.hall }}</dd>
+    <dt class="col-sm-3">Гостей</dt><dd class="col-sm-9">{{ object.guests }}</dd>
+    <dt class="col-sm-3">Предоплата</dt><dd class="col-sm-9">{{ object.prepayment_amount }}</dd>
+    <dt class="col-sm-3">Статус</dt><dd class="col-sm-9">{{ object.get_status_display }}</dd>
+  </dl>
+</div></div>
+{% endblock %}

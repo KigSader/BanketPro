@@ -1,0 +1,114 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.idea/
+*.iml
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.venv.bak/
+pip-wheel-metadata/
+
+# Packaging / build artifacts
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Tests / coverage / type checking
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Django
+# (не игнорируем миграции — их нужно коммитить)
+# локальные настройки
+*settings_local.py
+*local_settings.py
+*.local.py
+
+# SQLite / локальные БД/бэкапы
+db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+*.db
+*.bak
+
+# Collected static & media (источники static обычно в репо, а сборка — нет)
+staticfiles/
+static_root/
+**/staticfiles/
+**/static_root/
+
+# Пользовательские загрузки — в Git не храним
+media/
+!media/.gitkeep
+
+# Логи
+*.log
+log/
+logs/
+
+# Node (если есть)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp/
+.pnp.js
+# популярные бандлеры/кэши
+.next/
+.nuxt/
+.vite/
+.cache/
+
+# Env & secrets
+.env
+.env.*
+*.env
+*.env.*
+.envrc
+.secrets
+*.pem
+*.key
+
+# Editor/merge junk
+*~
+*.swp
+*.swo
+*.orig
+*.rej
+
+# Docker (если используешь)
+.docker/
+docker-data/
+
+# Celery/Redis pid/lock
+celerybeat-schedule
+celerybeat.pid

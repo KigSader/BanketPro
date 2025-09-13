@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}Рабочий стол • BanketPro{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 m-0">Рабочий стол</h1>
+  <div>
+    <a class="btn btn-outline-primary" href="{% url 'crm:client_create' %}">+ Добавить клиента</a>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="btn-group" role="group">
+        <a class="btn btn-sm btn-outline-secondary" href="?year={{ prev_year }}&month={{ prev_month }}">«</a>
+        <span class="btn btn-sm btn-outline-secondary disabled">{{ year }} / {{ month }}</span>
+        <a class="btn btn-sm btn-outline-secondary" href="?year={{ next_year }}&month={{ next_month }}">»</a>
+      </div>
+    </div>
+
+    <div class="row row-cols-7 g-2 mb-1">
+      <div class="col text-center small text-muted">Пн</div>
+      <div class="col text-center small text-muted">Вт</div>
+      <div class="col text-center small text-muted">Ср</div>
+      <div class="col text-center small text-muted">Чт</div>
+      <div class="col text-center small text-muted">Пт</div>
+      <div class="col text-center small text-muted">Сб</div>
+      <div class="col text-center small text-muted">Вс</div>
+    </div>
+
+    {% for week in weeks %}
+      <div class="row row-cols-7 g-2 mb-2">
+        {% for cell in week %}
+          <div class="col">
+            {% if cell.blank %}
+              <div class="cal-cell cal-empty"></div>
+            {% else %}
+              <div class="cal-cell" data-date="{{ cell.date_str }}">
+                <div class="d-flex justify-content-between">
+                  <div class="small fw-semibold">{{ cell.n }}</div>
+                  <div class="slot-dot" data-am="{{ cell.am|yesno:'1,0' }}" data-pm="{{ cell.pm|yesno:'1,0' }}"></div>
+                </div>
+                {% if cell.am or cell.pm %}
+                  {% if cell.am %}<div class="small text-truncate mt-1">Утро: {{ cell.am.client.full_name }}</div>{% endif %}
+                  {% if cell.pm %}<div class="small text-truncate">Вечер: {{ cell.pm.client.full_name }}</div>{% endif %}
+                {% else %}
+                  <button class="add-btn" type="button" title="Добавить" data-date="{{ cell.date_str }}">+</button>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between"><div class="text-muted small">Выручка за месяц</div><span class="badge bg-success">₽</span></div>
+    <div class="display-6 fw-semibold mt-2">{{ revenue|default:0 }}</div>
+  </div>
+</div>
+
+<!-- Modal slot chooser -->
+<div class="modal fade" id="slotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title">На какое время записать?</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <div class="d-grid gap-2">
+        <a class="btn btn-outline-primary" id="choose-am">День</a>
+        <a class="btn btn-outline-success" id="choose-pm">Вечер</a>
+        <a class="btn btn-primary" id="choose-full">Полный день</a>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<style>
+.cal-cell { position:relative; border:1px solid #eee; border-radius:.5rem; padding:.5rem; min-height:100px; background:#fff; overflow:hidden }
+.cal-empty { min-height:100px; border:1px dashed #eee; border-radius:.5rem; background:#fafafa }
+.slot-dot { width:16px; height:16px; border-radius:50%; border:1px solid #ced4da }
+.slot-dot[data-am='1'][data-pm='0'] { background: linear-gradient(to right, var(--bs-primary) 50%, transparent 50%) }
+.slot-dot[data-am='0'][data-pm='1'] { background: linear-gradient(to right, transparent 50%, var(--bs-success) 50%) }
+.slot-dot[data-am='1'][data-pm='1'] { background: linear-gradient(to right, var(--bs-primary) 50%, var(--bs-success) 50%); border-color: var(--bs-success) }
+/* "+" виден только при наведении на пустую ячейку */
+.add-btn { position:absolute; right:.4rem; bottom:.4rem; width:28px; height:28px; border-radius:50%; border:0; opacity:0; transition:opacity .15s; font-weight:700; line-height:1; background:#6f42c1; color:#fff }
+.cal-cell:hover .add-btn { opacity:1 }
+</style>
+
+<script>
+(function(){
+  let selectedDate = null;
+  document.addEventListener('click', function(e){
+    if (e.target.matches('.add-btn')){
+      selectedDate = e.target.dataset.date;
+      const m = new bootstrap.Modal(document.getElementById('slotModal')); m.show();
+    }
+    if (e.target.matches('#choose-am')){
+      window.location.href = "{% url 'calendarapp:event_create' %}" + "?date=" + selectedDate + "&slot=am";
+    }
+    if (e.target.matches('#choose-pm')){
+      window.location.href = "{% url 'calendarapp:event_create' %}" + "?date=" + selectedDate + "&slot=pm";
+    }
+    if (e.target.matches('#choose-full')){
+      window.location.href = "{% url 'calendarapp:event_create' %}" + "?date=" + selectedDate + "&slot=full";
+    }
+  }, false);
+})();
+</script>
+    
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Ближайшие 7 дней</h2>
+        <ul class="list-group list-group-flush">
+          {% for ev in upcoming_week %}
+            <li class="list-group-item d-flex justify-content-between">
+              <span><strong>{{ ev.date|date:"d.m.Y" }}</strong> • {{ ev.get_slot_display }} • {{ ev.hall }} — {{ ev.client.full_name }}</span>
+              <span class="badge bg-secondary">{{ ev.get_status_display }}</span>
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Нет ближайших мероприятий</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+{% endblock %}
