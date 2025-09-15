@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block title %}Списание товара{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Списание товара</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-danger">Списать</button>
+</form>{% endblock %}

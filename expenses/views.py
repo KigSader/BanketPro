@@ -40,4 +40,5 @@ class ExpenseListView(LoginRequiredMixin, generic.ListView):
 
 class ExpenseCreateView(LoginRequiredMixin, generic.CreateView):
     model = Expense; form_class = ExpenseForm
-    template_name = 'expenses/expense_form.html'; success_url = '/expenses/'
+    template_name = 'expenses/expense_form.html'
+    success_url = '/expenses/'

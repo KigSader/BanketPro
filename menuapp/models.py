@@ -30,3 +30,8 @@ class ClientMenu(models.Model):
     
     def __str__(self):
         return f"{self.title} ({self.client})"
+
+class ExtraService(models.Model):
+    name = models.CharField('Услуга', max_length=200, unique=True)
+    price = models.DecimalField('Цена', max_digits=12, decimal_places=2, default=0)
+    def __str__(self): return self.name

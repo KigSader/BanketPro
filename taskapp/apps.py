@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
-class StatsConfig(AppConfig):
+class TaskappConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'stats'
-    verbose_name = 'Статистика'
+    name = 'taskapp'
+    verbose_name = 'Задачи'

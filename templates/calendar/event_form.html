@@ -1,24 +1,74 @@
 {% extends 'base.html' %}
-{% block title %}Новое мероприятие • BanketPro{% endblock %}
+{% block title %}Новое мероприятие{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Добавить мероприятие</h1>
-<form method="post" enctype="multipart/form-data" class="card shadow-sm p-3">
-  {% csrf_token %}
+<h1 class="h5 mb-3">Добавить мероприятие</h1>
+<form method="post" enctype="multipart/form-data" class="card p-3 shadow-sm">{% csrf_token %}
   <div class="row g-3">
-    <div class="col-md-6">{{ form.client.label_tag }} {{ form.client }}</div>
-    <div class="col-md-6">{{ form.hall.label_tag }} {{ form.hall }}</div>
+    <div class="col-12">
+      <div class="form-check form-switch">
+        {{ form.new_client }} <label class="form-check-label" for="{{ form.new_client.id_for_label }}">Создать нового клиента</label>
+      </div>
+    </div>
+
+    <div id="block-existing" class="col-md-6">
+      <label class="form-label">Клиент (поиск)</label>
+      <input type="text" class="form-control" id="clientSearch" placeholder="ФИО или телефон">
+      {{ form.client }}
+    </div>
+
+    <div id="block-new" class="col-12 row g-3" style="display:none">
+      <div class="col-md-6">{{ form.new_full_name.label_tag }} {{ form.new_full_name }}</div>
+      <div class="col-md-6">{{ form.new_phone.label_tag }} {{ form.new_phone }}</div>
+      <div class="col-md-6">{{ form.new_source.label_tag }} {{ form.new_source }}</div>
+      <div class="col-12">{{ form.new_description.label_tag }} {{ form.new_description }}</div>
+    </div>
+
     <div class="col-md-4">{{ form.date.label_tag }} {{ form.date }}</div>
     <div class="col-md-4">{{ form.slot.label_tag }} {{ form.slot }}</div>
     <div class="col-md-4">{{ form.slot_full }} {{ form.slot_full.label_tag }}</div>
+
+    <div class="col-md-6">{{ form.hall.label_tag }} {{ form.hall }}</div>
+    <div class="col-md-6">{{ form.title.label_tag }} {{ form.title }}</div>
+
     <div class="col-md-4">{{ form.guests.label_tag }} {{ form.guests }}</div>
     <div class="col-md-4">{{ form.client_menu.label_tag }} {{ form.client_menu }}</div>
-    <div class="col-md-4">{{ form.contract.label_tag }} {{ form.contract }}</div>
-    <div class="col-md-4">{{ form.prepayment_amount.label_tag }} {{ form.prepayment_amount }}</div>
-    <div class="col-md-4">{{ form.status.label_tag }} {{ form.status }}</div>
+    <div class="col-md-4">{{ form.extras.label_tag }} {{ form.extras }}</div>
+
+    <div class="col-md-6">{{ form.prepayment_amount.label_tag }} {{ form.prepayment_amount }}</div>
+    <div class="col-md-6">{{ form.status.label_tag }} {{ form.status }}</div>
+
+    <div class="col-md-6">{{ form.contract.label_tag }} {{ form.contract }}</div>
+    <div class="col-md-6">{{ form.responsible.label_tag }} {{ form.responsible }}</div>
   </div>
+
   <div class="mt-3 d-flex gap-2">
-    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <button class="btn btn-primary">Сохранить</button>
     <a class="btn btn-outline-secondary" href="{% url 'crm:dashboard' %}">Отмена</a>
   </div>
 </form>
+
+<script>
+const blockNew = document.getElementById('block-new');
+const blockExist = document.getElementById('block-existing');
+function toggleNew(){ const on = document.querySelector('[name="new_client"]').checked; blockNew.style.display = on?'':'none'; blockExist.style.display = on?'none':''; }
+document.querySelector('[name="new_client"]').addEventListener('change', toggleNew); toggleNew();
+
+const input = document.getElementById('clientSearch'); const select = document.getElementById('id_client');
+if (input){
+  let t=null;
+  input.addEventListener('input', ()=>{
+    clearTimeout(t);
+    t = setTimeout(async ()=>{
+      const q = input.value.trim(); if(!q){ return; }
+      const r = await fetch(`/crm/clients/search?q=${encodeURIComponent(q)}`);
+      const items = await r.json(); select.innerHTML = '';
+      items.forEach(it=>{
+        const opt = document.createElement('option');
+        opt.value = it.id; opt.textContent = `${it.full_name} — ${it.phone}`;
+        select.appendChild(opt);
+      });
+    }, 250);
+  });
+}
+</script>
 {% endblock %}

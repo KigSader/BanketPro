@@ -14,6 +14,7 @@ urlpatterns = [
     path('expenses/', include('expenses.urls')),
     path('stats/', include('stats.urls')),
     path('settings/', include('settingsapp.urls')),
+    path('tasks/', include('taskapp.urls')),
 
 
     # Админка существует, но ссылку в шапке мы НЕ показываем

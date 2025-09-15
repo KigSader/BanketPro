@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from calendar import monthrange
 from .models import Client
 from calendarapp.models import Event
+from django.http import JsonResponse
+from django.urls import reverse_lazy
 
 
 class ClientListView(LoginRequiredMixin, generic.ListView):
@@ -15,13 +17,13 @@ class ClientListView(LoginRequiredMixin, generic.ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().order_by('-created_at')
-        q = self.request.GET.get('q');
+        q = self.request.GET.get('q')
         event_date = self.request.GET.get('event_date')
         if q:
             qs = qs.filter(Q(full_name__icontains=q) | Q(phone__icontains=q))
         if event_date:
-            qs = qs.filter(event__date=event_date).distinct()
-        return qs
+            qs = qs.filter(events__date=event_date).distinct()
+        return qs.annotate(event_count=Count('events'))
 
 
 class ClientCreateView(LoginRequiredMixin, generic.CreateView):
@@ -31,11 +33,19 @@ class ClientCreateView(LoginRequiredMixin, generic.CreateView):
     template_name = 'crm/client_form.html'
 
 class ClientDetailView(LoginRequiredMixin, generic.DetailView):
-    model = Client; template_name = 'crm/client_detail.html'
+    model = Client
+    template_name = 'crm/client_detail.html'
     def get_context_data(self, **kw):
         ctx = super().get_context_data(**kw)
-        ctx['events'] = self.object.event_set.select_related('hall').order_by('-date','slot')
+        ctx['events'] = self.object.events.select_related('hall').order_by('-date','slot')
         return ctx
+
+class ClientUpdateView(LoginRequiredMixin, generic.UpdateView):
+    model = Client
+    fields = ['full_name','phone','description','source']
+    template_name = 'crm/client_form.html'
+    success_url = reverse_lazy('crm:client_list')
+
 
 class DashboardView(LoginRequiredMixin, generic.TemplateView):
     template_name = 'crm/dashboard.html'
@@ -88,6 +98,7 @@ class DashboardView(LoginRequiredMixin, generic.TemplateView):
         else:
             next_year, next_month = year, month + 1
 
+
         ctx.update({
             'year': year, 'month': month,
             'weeks': weeks,
@@ -98,4 +109,9 @@ class DashboardView(LoginRequiredMixin, generic.TemplateView):
         })
         return ctx
 
-
+def clients_search(request):
+    q = (request.GET.get('q') or '').strip()
+    qs = Client.objects.none()
+    if q:
+        qs = Client.objects.filter(Q(full_name__icontains=q) | Q(phone__icontains=q)).order_by('full_name')[:20]
+    return JsonResponse([{'id':c.id,'full_name':c.full_name,'phone':c.phone} for c in qs], safe=False)

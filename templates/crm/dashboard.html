@@ -3,10 +3,12 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h1 class="h4 m-0">Рабочий стол</h1>
-  <div>
+  <div class="d-flex gap-2">
     <a class="btn btn-outline-primary" href="{% url 'crm:client_create' %}">+ Добавить клиента</a>
+    <a class="btn btn-primary" href="{% url 'calendarapp:event_create' %}">+ Добавить мероприятие</a>
   </div>
 </div>
+
 
 <div class="card shadow-sm mb-3">
   <div class="card-body">
@@ -111,7 +113,7 @@
   }, false);
 })();
 </script>
-    
+
     <div class="card shadow-sm mt-3">
       <div class="card-body">
         <h2 class="h6 mb-3">Ближайшие 7 дней</h2>
