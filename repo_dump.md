@@ -1,9 +1,246 @@
 # Repository dump
 
+Root: `C:\Users\Марат\PycharmProjects\BanketPro`
 
----
-## banketpro\settings.py
-```py
+
+
+# FILE: .env.example
+
+```ini
+# Django
+SECRET_KEY=change-me
+DEBUG=True
+ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Database (по умолчанию SQLite; чтобы перейти на Postgres — раскомментируй и укажи ENGINE/NAME/USER/...)
+# DB_ENGINE=django.db.backends.postgresql
+# DB_NAME=banketpro
+# DB_USER=postgres
+# DB_PASSWORD=postgres
+# DB_HOST=localhost
+# DB_PORT=5432
+
+```
+
+
+# FILE: dump_repo.py
+
+```python
+"""
+dump_project_clean.py — cобирает ТВОЙ исходный код в repo_dump.md,
+игнорируя системные папки и мусор.
+
+Запуск:
+    python dump_project_clean.py
+Опции:
+    python dump_project_clean.py --root . --out repo_dump.md --max-bytes 1048576
+"""
+
+import os
+import sys
+import argparse
+
+# --- что исключаем полностью (имена папок) ---
+EXCLUDE_DIRS = {
+    ".git", ".hg", ".svn", ".idea", ".vscode",
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".cache",
+    "node_modules", "bower_components",
+    ".venv", "venv", "env", "ENV", ".tox", ".eggs",
+    "dist", "build", "htmlcov", "coverage_html",
+    "site-packages", "lib", "lib64", "bin", "include",
+    # часто это сборные артефакты, а не исходники
+    "staticfiles", "media", "uploads",
+    # логи/временное
+    "logs", "log", "tmp", "temp"
+}
+
+# --- какие расширения считаем ИСХОДНИКАМИ ---
+INCLUDE_EXTENSIONS = {
+    # backend / infra
+    ".py", ".pyi", ".ini", ".cfg", ".toml", ".yaml", ".yml",
+    ".json", ".txt", ".md", ".sql",
+    ".env.example", ".dockerignore",
+    # frontend
+    ".html", ".htm", ".css", ".scss", ".less",
+    ".js", ".jsx", ".ts", ".tsx",
+}
+
+# --- какие файлы исключаем по имени (секреты и мусор) ---
+EXCLUDE_FILENAMES = {
+    ".env", ".env.local", ".env.development", ".env.production",
+    ".python-version",
+}
+
+# --- лимит размера одного файла (по умолчанию 1 МБ, чтобы случайно не втянуть сгенерированные простыни) ---
+DEFAULT_MAX_BYTES = 1 * 1024 * 1024  # 1 MiB
+
+
+def guess_lang_by_ext(ext: str) -> str:
+    ext = ext.lower()
+    return {
+        ".py": "python",
+        ".pyi": "python",
+        ".html": "html",
+        ".htm": "html",
+        ".css": "css",
+        ".scss": "scss",
+        ".less": "less",
+        ".js": "javascript",
+        ".jsx": "jsx",
+        ".ts": "typescript",
+        ".tsx": "tsx",
+        ".json": "json",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".ini": "ini",
+        ".cfg": "ini",
+        ".toml": "toml",
+        ".txt": "text",
+        ".md": "markdown",
+        ".sql": "sql",
+        ".dockerignore": "text",
+        ".env.example": "ini",
+    }.get(ext, "")
+
+
+def should_skip_dir(dirname: str) -> bool:
+    # сравнение по имени каталога (как отдаёт os.walk в `dirs`)
+    return dirname in EXCLUDE_DIRS or dirname.startswith(".")
+
+
+def should_include_file(path: str) -> bool:
+    base = os.path.basename(path)
+    if base in EXCLUDE_FILENAMES:
+        return False
+    _, ext = os.path.splitext(base)
+    # особый случай: ".env.example" — у него ext(".example"), проверим отдельно
+    if base.endswith(".env.example"):
+        return True
+    return ext.lower() in INCLUDE_EXTENSIONS
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Dump your source code to a single Markdown file.")
+    parser.add_argument("--root", default=".", help="Project root to scan")
+    parser.add_argument("--out", default="repo_dump.md", help="Output markdown file")
+    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES, help="Per-file size cap")
+    args = parser.parse_args()
+
+    project_root = os.path.abspath(args.root)
+    out_path = os.path.abspath(args.out)
+    max_bytes = args.max_bytes
+
+    included, skipped = 0, 0
+
+    with open(out_path, "w", encoding="utf-8") as out:
+        out.write(f"# Repository dump\n\nRoot: `{project_root}`\n\n")
+
+        for root, dirs, files in os.walk(project_root):
+            # отфильтровываем каталоги на месте, чтобы os.walk туда не заходил
+            dirs[:] = [d for d in dirs if not should_skip_dir(d)]
+
+            for fname in files:
+                fpath = os.path.join(root, fname)
+
+                # пропускаем файловые ссылки за пределы корня (на всякий случай)
+                try:
+                    rel = os.path.relpath(fpath, project_root)
+                except Exception:
+                    skipped += 1
+                    continue
+
+                if not should_include_file(fpath):
+                    skipped += 1
+                    continue
+
+                try:
+                    size = os.path.getsize(fpath)
+                    if size > max_bytes:
+                        skipped += 1
+                        continue
+                except OSError:
+                    skipped += 1
+                    continue
+
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                except Exception as e:
+                    content = f"<<Не удалось прочитать файл: {e}>>"
+
+                _, ext = os.path.splitext(fname)
+                lang = "text"
+                # особый случай для .env.example
+                if fname.endswith(".env.example"):
+                    lang = "ini"
+                else:
+                    lang = guess_lang_by_ext(ext) or "text"
+
+                out.write(f"\n\n# FILE: {rel}\n\n")
+                out.write(f"```{lang}\n{content}\n```\n")
+                included += 1
+
+    print(f"Готово: {out_path}")
+    print(f"Файлов включено: {included} | пропущено: {skipped}")
+    print("Подсказка: если что-то нужное пропустилось — добавь расширение в INCLUDE_EXTENSIONS,")
+    print("или убери папку из EXCLUDE_DIRS и повтори запуск.")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+```
+
+
+# FILE: manage.py
+
+```python
+#!/usr/bin/env python
+import os, sys
+def main():
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'banketpro.settings')
+    from django.core.management import execute_from_command_line
+    execute_from_command_line(sys.argv)
+if __name__ == '__main__':
+    main()
+
+```
+
+
+# FILE: readme.md
+
+```markdown
+Требования:
+
+Python 3.12.x (проверено на 3.12.3)
+
+Django=5.2.6
+
+
+```
+
+
+# FILE: repo_dump.md
+
+```markdown
+
+```
+
+
+# FILE: requirements.txt
+
+```text
+Django>=5.2.6
+python-decouple
+whitenoise
+Pillow
+
+```
+
+
+# FILE: banketpro\settings.py
+
+```python
 from pathlib import Path
 from decouple import config
 import os
@@ -66,12 +303,24 @@ TEMPLATES = [{
 WSGI_APPLICATION = 'banketpro.wsgi.application'
 
 # DB: по умолчанию SQLite (простая локальная разработка)
-ENGINE = config('DB_ENGINE', default='django.db.backends.sqlite3')
-if ENGINE == 'django.db.backends.sqlite3':
-    DATABASES = { /* redacted for dump */ }}
-else:
-    DATABASES = { /* redacted for dump */ },
+# База данных: SQLite по умолчанию; Postgres по переменным окружения
+if config('DB_ENGINE', default='django.db.backends.sqlite3') == 'django.db.backends.sqlite3':
+    DATABASES = {
+       'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('DB_ENGINE'),
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASSWORD'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+       }
     }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -105,9 +354,9 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 ```
 
 
----
-## banketpro\urls.py
-```py
+# FILE: banketpro\urls.py
+
+```python
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
@@ -134,9 +383,9 @@ urlpatterns = [
 ```
 
 
----
-## banketpro\wsgi.py
-```py
+# FILE: banketpro\wsgi.py
+
+```python
 import os
 from django.core.wsgi import get_wsgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'banketpro.settings')
@@ -145,16 +394,16 @@ application = get_wsgi_application()
 ```
 
 
----
-## banketpro\__init__.py
-```py
+# FILE: banketpro\__init__.py
+
+```python
 
 ```
 
 
----
-## calendarapp\apps.py
-```py
+# FILE: calendarapp\apps.py
+
+```python
 from django.apps import AppConfig
 
 
@@ -170,9 +419,201 @@ class CalendarappConfig(AppConfig):
 ```
 
 
----
-## calendarapp\models.py
-```py
+# FILE: calendarapp\forms.py
+
+```python
+from django import forms
+from django.core.exceptions import ValidationError
+from django.urls import reverse_lazy
+from django.db.models.fields.related import ManyToManyField
+
+from .models import Event
+from crm.models import Client, SOURCE_CHOICES
+
+# Выбор времени при создании события
+SLOT_CHOICES = (
+    ('day', 'День'),
+    ('evening', 'Вечер'),
+    ('full', 'Полный день'),
+)
+
+
+class EventCreateForm(forms.ModelForm):
+    """
+    Форма создания события:
+    - ввод клиента (ФИО+подсказки ≤3, телефон, источник, описание)
+    - выбор зала/даты/времени (день/вечер/полный день)
+    - название/повод, гости, предоплата
+    - меню и доп.услуги (работает как с FK, так и с M2M)
+    - ответственный = текущий пользователь (передаётся в save(user=...))
+    """
+
+    # --- Клиент (виртуальные поля) ---
+    existing_client_id = forms.IntegerField(widget=forms.HiddenInput, required=False)
+
+    new_full_name = forms.CharField(
+        label='ФИО',
+        max_length=255,
+        widget=forms.TextInput(attrs={
+            'autocomplete': 'off',
+            'placeholder': 'Иванов Иван Иванович',
+            'data-autocomplete-url': reverse_lazy('calendarapp:client_suggest'),
+        })
+    )
+    new_phone = forms.CharField(label='Телефон', max_length=32, required=False)
+
+    # Источник — фиксированный список: Яндекс, 2ГИС, Сайт, Рекомендация
+    new_source = forms.ChoiceField(label='Источник', choices=SOURCE_CHOICES, required=False)
+
+    new_description = forms.CharField(
+        label='Описание',
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2})
+    )
+
+    # --- Поле выбора времени (День/Вечер/Полный день) ---
+    slot_choice = forms.ChoiceField(label='Время', choices=SLOT_CHOICES, widget=forms.RadioSelect)
+
+    class Meta:
+        model = Event
+        # Подстрой список под свои поля Event при необходимости.
+        fields = [
+            'hall',               # Зал (FK)
+            'date',               # Дата мероприятия (DateField)
+            'title',              # Название/повод
+            'guests',             # Кол-во гостей (Integer)
+            'prepayment_amount',  # Сумма предоплаты (Decimal/Integer)
+            'client_menu',        # Меню (FK или M2M — обе модели поддержаны)
+            'extras',             # Доп. услуги (FK или M2M — обе модели поддержаны)
+            # 'contract' — прикрепляется уже на карточке мероприятия
+        ]
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    # --- Валидация занятости слотов ---
+    def clean(self):
+        cleaned = super().clean()
+        hall = cleaned.get('hall')
+        date = cleaned.get('date')
+        slot_choice = cleaned.get('slot_choice')
+
+        if not hall or not date or not slot_choice:
+            return cleaned
+
+        qs = Event.objects.filter(hall=hall, date=date)
+        errors = []
+
+        if slot_choice == 'day':
+            if qs.filter(slot='day').exists():
+                errors.append('Слот «День» уже занят в выбранном зале и дате.')
+        elif slot_choice == 'evening':
+            if qs.filter(slot='evening').exists():
+                errors.append('Слот «Вечер» уже занят в выбранном зале и дате.')
+        elif slot_choice == 'full':
+            busy = []
+            if qs.filter(slot='day').exists():
+                busy.append('День')
+            if qs.filter(slot='evening').exists():
+                busy.append('Вечер')
+            if busy:
+                errors.append(f'Нельзя забронировать «Полный день»: занято — {", ".join(busy)}.')
+
+        if errors:
+            raise ValidationError(errors)
+
+        return cleaned
+
+    # --- Сохранение: создаём/находим клиента, создаём 1 или 2 события ---
+    def save(self, user, commit=True):
+        """
+        Сохраняем event(ы) и создаём/находим клиента.
+        Возвращаем основной event (для редиректа на detail).
+        """
+        cleaned = self.cleaned_data
+
+        # 1) Клиент: поиск по hidden-id, иначе создание нового
+        client = None
+        existing_id = cleaned.get('existing_client_id')
+        if existing_id:
+            try:
+                client = Client.objects.get(pk=existing_id)
+            except Client.DoesNotExist:
+                client = None
+
+        if client is None:
+            client = Client.objects.create(
+                full_name  = cleaned['new_full_name'],
+                phone       = cleaned.get('new_phone') or '',
+                source      = cleaned.get('new_source') or '',
+                description = cleaned.get('new_description') or '',
+            )
+
+        # 2) Общие данные мероприятия
+        base_kwargs = dict(
+            client            = client,
+            hall              = cleaned['hall'],
+            date              = cleaned['date'],
+            title             = cleaned.get('title') or '',
+            guests            = cleaned.get('guests') or 0,
+            prepayment_amount = cleaned.get('prepayment_amount') or 0,
+            responsible       = user,        # кто создал — ответственный
+            status            = 'pending',   # дефолтный статус при создании
+        )
+
+        slot_choice = cleaned['slot_choice']
+
+        # Универсальный помощник: присвоение FK/M2M, если поле реально есть в модели
+        def _assign_field(e, field_name):
+            if field_name not in self.cleaned_data:
+                return
+            value = self.cleaned_data[field_name]
+            # пустые — пропускаем
+            if value in (None, '', []):
+                return
+            try:
+                field = e._meta.get_field(field_name)
+            except Exception:
+                return
+            if isinstance(field, ManyToManyField):
+                # Для M2M нужен сохранённый объект
+                if not e.pk:
+                    e.save()
+                rel = getattr(e, field_name, None)
+                if hasattr(rel, 'set'):
+                    rel.set(value)
+            else:
+                # Для обычных/ForeignKey
+                setattr(e, field_name, value)
+                # Если объект ещё не сохранён — save() создаст его.
+                if e.pk:
+                    e.save(update_fields=[field_name])
+                else:
+                    e.save()
+
+        # Создание события(ий)
+        def _create_event(slot: str):
+            e = Event(**base_kwargs)
+            e.slot = slot  # 'day' / 'evening'
+            if commit:
+                e.save()
+                _assign_field(e, 'client_menu')
+                _assign_field(e, 'extras')
+            return e
+
+        if slot_choice == 'full':
+            first = _create_event('day')
+            _create_event('evening')
+            return first
+        else:
+            return _create_event(slot_choice)
+
+```
+
+
+# FILE: calendarapp\models.py
+
+```python
 from django.db import models
 from crm.models import Client
 from django.conf import settings
@@ -228,9 +669,9 @@ class Event(models.Model):
 ```
 
 
----
-## calendarapp\signals.py
-```py
+# FILE: calendarapp\signals.py
+
+```python
 # calendarapp/signals.py
 from decimal import Decimal
 from django.db.models.signals import pre_save, post_save
@@ -307,138 +748,102 @@ def writeoff_on_paid(sender, instance: Event, created, **kwargs):
 ```
 
 
----
-## calendarapp\urls.py
-```py
+# FILE: calendarapp\urls.py
+
+```python
 from django.urls import path
 from . import views
+
 app_name = 'calendarapp'
+
 urlpatterns = [
     path('add/', views.EventCreateView.as_view(), name='event_create'),
+    path('clients/suggest/', views.client_suggest, name='client_suggest'),
     path('<int:pk>/', views.EventDetailView.as_view(), name='event_detail'),
 ]
 
 ```
 
 
----
-## calendarapp\views.py
-```py
-from django import forms
+# FILE: calendarapp\views.py
+
+```python
 from django.views import generic
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse
-from crm.models import Client
 from .models import Event
 from datetime import date, timedelta
 import calendar as pycal
 from django.utils import timezone
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.views.generic import FormView
+from django.urls import reverse_lazy
+from django.db import transaction
+from django.contrib.auth.decorators import login_required
+from .forms import EventCreateForm
+from crm.models import Client
 
-class EventForm(forms.ModelForm):
-    # Полный день (второй слот создадим в form_valid)
-    slot_full = forms.BooleanField(label='Полный день', required=False)
 
-    # Создание НОВОГО клиента прямо из формы
-    new_client = forms.BooleanField(label='Создать нового клиента', required=False)
-    new_full_name = forms.CharField(label='ФИО', required=False)
-    new_phone = forms.CharField(label='Телефон', required=False)
-    new_source = forms.CharField(label='Источник', required=False)
-    new_description = forms.CharField(label='Описание', required=False,
-                                      widget=forms.Textarea(attrs={'rows':2,'placeholder':'Краткая заметка'}))
-
-    class Meta:
-        model = Event
-        fields = ['client','hall','date','slot','title','status','guests',
-                  'client_menu','extras','contract','prepayment_amount','responsible']
-        labels = {
-            'client': 'Клиент',
-            'hall': 'Зал',
-            'date': 'Дата',
-            'slot': 'Время',
-            'title': 'Название/повод',
-            'status': 'Статус',
-            'guests': 'Количество гостей',
-            'client_menu': 'Меню',
-            'extras': 'Доп. услуги',
-            'contract': 'Договор',
-            'prepayment_amount': 'Предоплата, ₽',
-            'responsible': 'Ответственный',
-        }
-        widgets = {
-            'date': forms.DateInput(attrs={'type':'date'}),
-            'slot': forms.Select(attrs={'class':'form-select'}),
-            'status': forms.Select(attrs={'class':'form-select'}),
-            'client': forms.Select(attrs={'class':'form-select'}),
-            'hall': forms.Select(attrs={'class':'form-select'}),
-            'client_menu': forms.Select(attrs={'class':'form-select'}),
-            'extras': forms.SelectMultiple(attrs={'size':6, 'class':'form-select'}),
-            'title': forms.TextInput(attrs={'placeholder':'Напр., Юбилей, Свадьба'}),
-            'prepayment_amount': forms.NumberInput(attrs={'step':'0.01','min':'0'}),
-            'guests': forms.NumberInput(attrs={'min':'0'}),
-        }
-
-    def clean(self):
-        data = super().clean()
-        # Валидация "нового клиента"
-        if data.get('new_client'):
-            fn = (data.get('new_full_name') or '').strip()
-            ph = (data.get('new_phone') or '').strip()
-            if not fn:
-                self.add_error('new_full_name', 'Укажите ФИО')
-            if not ph:
-                self.add_error('new_phone', 'Укажите телефон')
-        else:
-            if not data.get('client'):
-                self.add_error('client', 'Выберите клиента или создайте нового')
-        return data
-
-class EventCreateView(LoginRequiredMixin, generic.CreateView):
-    model = Event
-    form_class = EventForm
+class EventCreateView(LoginRequiredMixin, FormView):
     template_name = 'calendar/event_form.html'
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        # ВАЖНО: передаём request → форма его "pop" в __init__
-        kwargs['request'] = self.request
-        return kwargs
+    form_class = EventCreateForm
+    success_url = reverse_lazy('crm:dashboard')  # на всякий случай, если не будет detail
 
     def form_valid(self, form):
-        # Забираем флаг "полный день" ДО сохранения (иначе KeyError/TypeError)
-        full = form.cleaned_data.pop('slot_full', False)
-
-        # Создадим клиента при необходимости
-        if form.cleaned_data.get('new_client'):
-            client = Client.objects.create(
-                full_name=form.cleaned_data['new_full_name'],
-                phone=form.cleaned_data['new_phone'],
-                source=form.cleaned_data.get('new_source', ''),
-                description=form.cleaned_data.get('new_description', '')
-            )
-            form.instance.client = client
-
-        # Сохраняем первое событие
-        response = super().form_valid(form)
-
-        # Дублируем второй слот, если "Полный день"
-        if full:
-            other = 'pm' if self.object.slot == 'am' else 'am'
-            Event.objects.create(
-                client=self.object.client, hall=self.object.hall,
-                date=self.object.date, slot=other,
-                title=self.object.title, status=self.object.status,
-                guests=self.object.guests, client_menu=self.object.client_menu,
-                prepayment_amount=self.object.prepayment_amount,
-                responsible=self.object.responsible,
-            )
-        return response
+        with transaction.atomic():
+            event = form.save(user=self.request.user, commit=True)
+        # После сохранения — на карточку мероприятия
+        return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse('calendarapp:event_detail', args=[self.object.pk])
+        # редирект на detail созданного события (основного)
+        # form_valid уже вызван, объект можно достать через cleaned_data → но мы его вернули в save
+        # упрощение: сохраним pk в self.created_event_pk
+        return getattr(self, 'created_event_url', None) or super().get_success_url()
+
+    def form_invalid(self, form):
+        return super().form_invalid(form)
+
+    def post(self, request, *args, **kwargs):
+        # перехватываем, чтобы сохранить URL detail
+        form = self.get_form()
+        if form.is_valid():
+            with transaction.atomic():
+                event = form.save(user=request.user, commit=True)
+            self.created_event_url = reverse_lazy('calendarapp:event_detail', kwargs={'pk': event.pk})
+            return self.form_valid(form)
+
+        return self.form_invalid(form)
+
+
+@login_required
+def client_suggest(request):
+    """
+    Подсказки по ФИО: до 3 вариантов по вхождению, нечувствительно к регистру.
+    ?q=иванов
+    """
+    q = (request.GET.get('q') or '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+
+    qs = (Client.objects
+          .filter(full_name__icontains=q)
+          .order_by('full_name')[:3])
+    data = [
+        {
+            'id': c.id,
+            'label': c.full_name,
+            'phone': c.phone or '',
+            'source': c.source or '',
+            'description': c.description or '',
+        } for c in qs
+    ]
+    return JsonResponse({'results': data})
+
 
 class EventDetailView(LoginRequiredMixin, generic.DetailView):
     model = Event
     template_name = 'calendar/event_detail.html'
+
 
 class CalendarView(LoginRequiredMixin, generic.TemplateView):
     """
@@ -469,7 +874,7 @@ class CalendarView(LoginRequiredMixin, generic.TemplateView):
             Event.objects
             .filter(date__gte=start, date__lte=end)
             .select_related('client', 'hall')
-            .only('id','date','slot','status','client__full_name','hall__name')
+            .only('id', 'date', 'slot', 'status', 'client__full_name', 'hall__name')
         )
         # Группируем события по дате
         events_by_date = {}
@@ -519,33 +924,309 @@ class CalendarView(LoginRequiredMixin, generic.TemplateView):
 ```
 
 
----
-## calendarapp\__init__.py
-```py
+# FILE: calendarapp\__init__.py
+
+```python
 
 ```
 
 
----
-## crm\models.py
-```py
+# FILE: calendarapp\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 14:44
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ('crm', '0001_initial'),
+        ('menuapp', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Hall',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=100, verbose_name='Зал')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Event',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField(verbose_name='Дата')),
+                ('slot', models.CharField(choices=[('am', 'Первая половина дня'), ('pm', 'Вторая половина дня')], max_length=2, verbose_name='Слот')),
+                ('guests', models.PositiveIntegerField(default=0, verbose_name='Количество гостей')),
+                ('contract', models.FileField(blank=True, null=True, upload_to='contracts/', verbose_name='Договор')),
+                ('prepayment_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10, verbose_name='Предоплата')),
+                ('status', models.CharField(choices=[('draft', 'Черновик'), ('pending', 'В работе'), ('paid', 'Оплачено'), ('canceled', 'Отменено')], default='pending', max_length=20, verbose_name='Статус')),
+                ('client', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='events', to='crm.client', verbose_name='Клиент')),
+                ('client_menu', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='menuapp.clientmenu', verbose_name='Меню')),
+                ('hall', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='events', to='calendarapp.hall', verbose_name='Зал')),
+            ],
+            options={
+                'constraints': [models.UniqueConstraint(fields=('hall', 'date', 'slot'), name='unique_hall_date_slot')],
+            },
+        ),
+    ]
+
+```
+
+
+# FILE: calendarapp\migrations\0002_alter_event_status.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 19:36
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('calendarapp', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AlterField(
+            model_name='event',
+            name='status',
+            field=models.CharField(choices=[('draft', 'Черновик'), ('pending', 'В работе'), ('confirmed', 'Подтверждено'), ('paid', 'Оплачено'), ('canceled', 'Отменено')], default='pending', max_length=20, verbose_name='Статус'),
+        ),
+    ]
+
+```
+
+
+# FILE: calendarapp\migrations\0003_event_extras_event_responsible_event_title_and_more.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-14 00:06
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('calendarapp', '0002_alter_event_status'),
+        ('crm', '0001_initial'),
+        ('menuapp', '0003_extraservice'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='event',
+            name='extras',
+            field=models.ManyToManyField(blank=True, to='menuapp.extraservice'),
+        ),
+        migrations.AddField(
+            model_name='event',
+            name='responsible',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL),
+        ),
+        migrations.AddField(
+            model_name='event',
+            name='title',
+            field=models.CharField(blank=True, max_length=200),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='client',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='events', to='crm.client'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='client_menu',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='menuapp.clientmenu'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='contract',
+            field=models.FileField(blank=True, upload_to='contracts/'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='date',
+            field=models.DateField(),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='guests',
+            field=models.PositiveIntegerField(default=0),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='hall',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='calendarapp.hall'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='prepayment_amount',
+            field=models.DecimalField(decimal_places=2, default=0, max_digits=12),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='slot',
+            field=models.CharField(choices=[('am', 'День'), ('pm', 'Вечер')], max_length=2),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='status',
+            field=models.CharField(choices=[('draft', 'Черновик'), ('pending', 'В работе'), ('confirmed', 'Подтверждено'), ('paid', 'Оплачено'), ('canceled', 'Отменено')], default='draft', max_length=12),
+        ),
+    ]
+
+```
+
+
+# FILE: calendarapp\migrations\0004_alter_event_options_alter_hall_options_hall_capacity_and_more.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-14 08:34
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('calendarapp', '0003_event_extras_event_responsible_event_title_and_more'),
+        ('crm', '0001_initial'),
+        ('menuapp', '0003_extraservice'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.AlterModelOptions(
+            name='event',
+            options={'verbose_name': 'Мероприятие', 'verbose_name_plural': 'Мероприятия'},
+        ),
+        migrations.AlterModelOptions(
+            name='hall',
+            options={'verbose_name': 'Зал', 'verbose_name_plural': 'Залы'},
+        ),
+        migrations.AddField(
+            model_name='hall',
+            name='capacity',
+            field=models.PositiveIntegerField(default=0, verbose_name='Вместимость'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='client',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='events', to='crm.client', verbose_name='Клиент'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='client_menu',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='menuapp.clientmenu', verbose_name='Меню'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='contract',
+            field=models.FileField(blank=True, upload_to='contracts/', verbose_name='Договор'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='date',
+            field=models.DateField(verbose_name='Дата'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='extras',
+            field=models.ManyToManyField(blank=True, to='menuapp.extraservice', verbose_name='Доп. услуги'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='guests',
+            field=models.PositiveIntegerField(default=0, verbose_name='Количество гостей'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='hall',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='calendarapp.hall', verbose_name='Зал'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='prepayment_amount',
+            field=models.DecimalField(decimal_places=2, default=0, max_digits=12, verbose_name='Предоплата, ₽'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='responsible',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Ответственный'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='slot',
+            field=models.CharField(choices=[('am', 'День'), ('pm', 'Вечер')], max_length=2, verbose_name='Время'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='status',
+            field=models.CharField(choices=[('draft', 'Черновик'), ('pending', 'В работе'), ('confirmed', 'Подтверждено'), ('paid', 'Оплачено'), ('canceled', 'Отменено')], default='draft', max_length=12, verbose_name='Статус'),
+        ),
+        migrations.AlterField(
+            model_name='event',
+            name='title',
+            field=models.CharField(blank=True, max_length=200, verbose_name='Название/повод'),
+        ),
+        migrations.AlterField(
+            model_name='hall',
+            name='name',
+            field=models.CharField(max_length=200, verbose_name='Название зала'),
+        ),
+    ]
+
+```
+
+
+# FILE: calendarapp\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: crm\models.py
+
+```python
 from django.db import models
 
+SOURCE_CHOICES = (
+    ('yandex', 'Яндекс'),
+    ('2gis', '2ГИС'),
+    ('site', 'Сайт'),
+    ('ref', 'Рекомендация'),
+)
 class Client(models.Model):
     full_name = models.CharField('ФИО', max_length=200)
     phone = models.CharField('Телефон', max_length=50)
     description = models.TextField('Описание', blank=True)
-    source = models.CharField('Источник', max_length=100, blank=True)
+    source = models.CharField('Источник', max_length=32, choices=SOURCE_CHOICES, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self): return self.full_name
+    def __str__(self):
+        return self.full_name
 
 ```
 
 
----
-## crm\urls.py
-```py
+# FILE: crm\urls.py
+
+```python
 from django.urls import path
 from . import views
 
@@ -558,14 +1239,15 @@ urlpatterns = [
     path('clients/<int:pk>/', views.ClientDetailView.as_view(), name='client_detail'),
 
     path('clients/search', views.clients_search, name='client_search'),
+    path('clients/<int:pk>/edit/', views.ClientUpdateView.as_view(), name='client_update'),
 ]
 
 ```
 
 
----
-## crm\views.py
-```py
+# FILE: crm\views.py
+
+```python
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic
 from django.utils import timezone
@@ -575,6 +1257,7 @@ from calendar import monthrange
 from .models import Client
 from calendarapp.models import Event
 from django.http import JsonResponse
+from django.urls import reverse_lazy
 
 
 class ClientListView(LoginRequiredMixin, generic.ListView):
@@ -606,6 +1289,12 @@ class ClientDetailView(LoginRequiredMixin, generic.DetailView):
         ctx = super().get_context_data(**kw)
         ctx['events'] = self.object.events.select_related('hall').order_by('-date','slot')
         return ctx
+
+class ClientUpdateView(LoginRequiredMixin, generic.UpdateView):
+    model = Client
+    fields = ['full_name','phone','description','source']
+    template_name = 'crm/client_form.html'
+    success_url = reverse_lazy('crm:client_list')
 
 
 class DashboardView(LoginRequiredMixin, generic.TemplateView):
@@ -677,93 +1366,58 @@ def clients_search(request):
         qs = Client.objects.filter(Q(full_name__icontains=q) | Q(phone__icontains=q)).order_by('full_name')[:20]
     return JsonResponse([{'id':c.id,'full_name':c.full_name,'phone':c.phone} for c in qs], safe=False)
 
+```
+
+
+# FILE: crm\__init__.py
+
+```python
 
 ```
 
 
----
-## crm\__init__.py
-```py
+# FILE: crm\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 14:44
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Client',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('full_name', models.CharField(max_length=200, verbose_name='ФИО')),
+                ('phone', models.CharField(max_length=50, verbose_name='Телефон')),
+                ('description', models.TextField(blank=True, verbose_name='Описание')),
+                ('source', models.CharField(blank=True, max_length=100, verbose_name='Источник')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+        ),
+    ]
 
 ```
 
 
----
-## dump_repo.py
-```py
-#!/usr/bin/env python3
-# dump_repo.py — собирает важные файлы в один markdown для ревью
-import os, re, sys
-from pathlib import Path
+# FILE: crm\migrations\__init__.py
 
-ROOT = Path(__file__).resolve().parent
-OUT  = ROOT / "repo_dump.md"
-
-# Что включаем
-INCLUDE_EXT  = {".py", ".html", ".txt", ".md", ".ini", ".cfg", ".toml", ".yaml", ".yml"}
-INCLUDE_DIRS = {"banketpro", "calendarapp", "crm", "menuapp", "tasksapp",
-                "warehouse", "employees", "expenses", "reviews", "settingsapp",
-                "templates"}  # добавь свои app'ы при необходимости
-
-# Что исключаем
-EXCLUDE_DIRS = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", ".mypy_cache",
-                "venv", ".venv", "env", "node_modules", "static", "media",
-                "migrations", "dist", "build", ".idea", ".vscode", ".DS_Store"}
-
-def should_skip_dir(path: Path) -> bool:
-    name = path.name
-    if name in EXCLUDE_DIRS: return True
-    if name.startswith('.'): return True
-    return False
-
-def should_take_file(path: Path) -> bool:
-    if path.suffix.lower() not in INCLUDE_EXT: return False
-    return True
-
-def walk_selected(root: Path):
-    # Ищем только внутри INCLUDE_DIRS (и корневые конфиги)
-    for p in sorted(root.iterdir()):
-        if p.is_file() and should_take_file(p):
-            yield p
-        elif p.is_dir() and (p.name in INCLUDE_DIRS) and not should_skip_dir(p):
-            for sub, _, files in os.walk(p):
-                sp = Path(sub)
-                # отбрасываем запрещённые каталоги
-                parts = set(sp.parts)
-                if any(d in parts for d in EXCLUDE_DIRS): continue
-                for f in files:
-                    fp = sp / f
-                    if should_take_file(fp):
-                        yield fp
-
-def main():
-    lines = []
-    lines.append("# Repository dump\n")
-    for file in walk_selected(ROOT):
-        rel = file.relative_to(ROOT)
-        try:
-            content = file.read_text(encoding="utf-8", errors="replace")
-        except Exception as e:
-            continue
-        # слегка маскируем секреты в .env и settings
-        if rel.name.lower().startswith(".env") or rel.name.lower() in {"settings.py",}:
-            content = re.sub(r"(SECRET_KEY\s*=\s*['\"].+?['\"])", r"SECRET_KEY = '***'", content)
-            content = re.sub(r"(DATABASES\s*=\s*\{[\s\S]+?\})", r"DATABASES = { /* redacted for dump */ }", content)
-
-        lines.append(f"\n\n---\n## {rel}\n```{file.suffix[1:] or ''}\n{content}\n```\n")
-
-    OUT.write_text("".join(lines), encoding="utf-8")
-    print(f"Written: {OUT}")
-
-if __name__ == "__main__":
-    main()
+```python
 
 ```
 
 
----
-## employees\models.py
-```py
+# FILE: employees\models.py
+
+```python
 from django.db import models
 
 
@@ -803,9 +1457,9 @@ class PayrollSettings(models.Model):
 ```
 
 
----
-## employees\urls.py
-```py
+# FILE: employees\urls.py
+
+```python
 from django.urls import path
 from . import views
 
@@ -821,9 +1475,9 @@ urlpatterns = [
 ```
 
 
----
-## employees\views.py
-```py
+# FILE: employees\views.py
+
+```python
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic, View
 from datetime import date, timedelta
@@ -887,16 +1541,108 @@ class PayrollCalcView(LoginRequiredMixin, View):
 ```
 
 
----
-## employees\__init__.py
-```py
+# FILE: employees\__init__.py
+
+```python
 
 ```
 
 
----
-## expenses\admin.py
-```py
+# FILE: employees\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 14:44
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Employee',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('full_name', models.CharField(max_length=200, verbose_name='ФИО')),
+                ('phone', models.CharField(blank=True, max_length=50, verbose_name='Телефон')),
+                ('position', models.CharField(blank=True, max_length=100, verbose_name='Должность')),
+                ('hourly_rate', models.DecimalField(decimal_places=2, default=0, max_digits=10, verbose_name='Ставка/час')),
+                ('category', models.CharField(blank=True, max_length=100, verbose_name='Категория')),
+                ('contract', models.FileField(blank=True, null=True, upload_to='employees/contracts/', verbose_name='Договор')),
+                ('passport', models.FileField(blank=True, null=True, upload_to='employees/passports/', verbose_name='Паспорт')),
+                ('med_book', models.FileField(blank=True, null=True, upload_to='employees/med/', verbose_name='Мед. книжка')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+        ),
+    ]
+
+```
+
+
+# FILE: employees\migrations\0002_payrollsettings_timesheet_timesheetentry.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 19:36
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('employees', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='PayrollSettings',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('kitchen_percent', models.DecimalField(decimal_places=2, default=4, max_digits=5, verbose_name='Кухня, %')),
+                ('service_percent', models.DecimalField(decimal_places=2, default=6, max_digits=5, verbose_name='Сервис, %')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Timesheet',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('week_start', models.DateField(verbose_name='Начало недели (Пн)')),
+                ('employee', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='timesheets', to='employees.employee')),
+            ],
+            options={
+                'unique_together': {('week_start', 'employee')},
+            },
+        ),
+        migrations.CreateModel(
+            name='TimesheetEntry',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField()),
+                ('hours', models.DecimalField(decimal_places=2, default=0, max_digits=5)),
+                ('timesheet', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='entries', to='employees.timesheet')),
+            ],
+        ),
+    ]
+
+```
+
+
+# FILE: employees\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: expenses\admin.py
+
+```python
 from django.contrib import admin
 
 # Register your models here.
@@ -904,9 +1650,9 @@ from django.contrib import admin
 ```
 
 
----
-## expenses\apps.py
-```py
+# FILE: expenses\apps.py
+
+```python
 from django.apps import AppConfig
 
 
@@ -917,9 +1663,9 @@ class ExpensesConfig(AppConfig):
 ```
 
 
----
-## expenses\forms.py
-```py
+# FILE: expenses\forms.py
+
+```python
 from django import forms
 from .models import Expense
 
@@ -932,9 +1678,9 @@ class ExpenseForm(forms.ModelForm):
 ```
 
 
----
-## expenses\models.py
-```py
+# FILE: expenses\models.py
+
+```python
 from django.db import models
 
 class Expense(models.Model):
@@ -951,9 +1697,9 @@ class Expense(models.Model):
 ```
 
 
----
-## expenses\tests.py
-```py
+# FILE: expenses\tests.py
+
+```python
 from django.test import TestCase
 
 # Create your tests here.
@@ -961,9 +1707,9 @@ from django.test import TestCase
 ```
 
 
----
-## expenses\urls.py
-```py
+# FILE: expenses\urls.py
+
+```python
 from django.urls import path
 from . import views
 
@@ -976,9 +1722,9 @@ urlpatterns = [
 ```
 
 
----
-## expenses\views.py
-```py
+# FILE: expenses\views.py
+
+```python
 import csv
 from io import StringIO
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -1027,31 +1773,83 @@ class ExpenseCreateView(LoginRequiredMixin, generic.CreateView):
 ```
 
 
----
-## expenses\__init__.py
-```py
+# FILE: expenses\__init__.py
+
+```python
 
 ```
 
 
----
-## manage.py
-```py
-#!/usr/bin/env python
-import os, sys
-def main():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'banketpro.settings')
-    from django.core.management import execute_from_command_line
-    execute_from_command_line(sys.argv)
-if __name__ == '__main__':
-    main()
+# FILE: expenses\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 19:36
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Expense',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField()),
+                ('type', models.CharField(choices=[('хоз', 'Хоз'), ('аренда', 'Аренда'), ('комм', 'Коммуналка'), ('ремонт', 'Ремонт'), ('реклама', 'Реклама'), ('обслуж', 'Обслуживание'), ('др', 'Другое')], max_length=10, verbose_name='Тип')),
+                ('amount', models.DecimalField(decimal_places=2, max_digits=12, verbose_name='Сумма')),
+                ('note', models.CharField(blank=True, max_length=200, verbose_name='Комментарий')),
+            ],
+        ),
+    ]
 
 ```
 
 
----
-## menuapp\models.py
-```py
+# FILE: expenses\migrations\0002_alter_expense_options_alter_expense_date.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 21:16
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('expenses', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AlterModelOptions(
+            name='expense',
+            options={'ordering': ['-date', '-id']},
+        ),
+        migrations.AlterField(
+            model_name='expense',
+            name='date',
+            field=models.DateField(verbose_name='Дата'),
+        ),
+    ]
+
+```
+
+
+# FILE: expenses\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: menuapp\models.py
+
+```python
 from django.db import models
 from crm.models import Client
 from warehouse.models import TechCard
@@ -1093,9 +1891,9 @@ class ExtraService(models.Model):
 ```
 
 
----
-## menuapp\urls.py
-```py
+# FILE: menuapp\urls.py
+
+```python
 from django.urls import path
 from . import views
 app_name='menuapp'
@@ -1111,9 +1909,9 @@ urlpatterns = [
 ```
 
 
----
-## menuapp\views.py
-```py
+# FILE: menuapp\views.py
+
+```python
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic
 from .models import DishGroup, Dish, ClientMenu, ExtraService
@@ -1153,40 +1951,137 @@ class ExtraServiceCreateView(LoginRequiredMixin, generic.CreateView):
 ```
 
 
----
-## menuapp\__init__.py
-```py
+# FILE: menuapp\__init__.py
+
+```python
 
 ```
 
 
----
-## readme.md
-```md
-Требования:
+# FILE: menuapp\migrations\0001_initial.py
 
-Python 3.12.x (проверено на 3.12.3)
+```python
+# Generated by Django 5.2.6 on 2025-09-10 14:44
 
-Django=5.2.6
+import django.db.models.deletion
+from django.db import migrations, models
 
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ('crm', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Dish',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=200, verbose_name='Название')),
+                ('photo', models.ImageField(blank=True, null=True, upload_to='dishes/', verbose_name='Фото')),
+                ('composition', models.TextField(blank=True, verbose_name='Описание')),
+                ('serving_weight', models.PositiveIntegerField(default=0, verbose_name='Порция, г')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='DishGroup',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=100, verbose_name='Группа')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='ClientMenu',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('title', models.CharField(max_length=200, verbose_name='Название меню')),
+                ('client', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='menus', to='crm.client')),
+                ('dishes', models.ManyToManyField(blank=True, to='menuapp.dish')),
+            ],
+        ),
+        migrations.AddField(
+            model_name='dish',
+            name='group',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='dishes', to='menuapp.dishgroup'),
+        ),
+    ]
 
 ```
 
 
----
-## requirements.txt
-```txt
-Django>=5.2.6
-python-decouple
-whitenoise
-Pillow
+# FILE: menuapp\migrations\0002_dish_price_dish_techcard.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 19:36
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('menuapp', '0001_initial'),
+        ('warehouse', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='dish',
+            name='price',
+            field=models.DecimalField(decimal_places=2, default=0, max_digits=10, verbose_name='Стоимость'),
+        ),
+        migrations.AddField(
+            model_name='dish',
+            name='techcard',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='warehouse.techcard'),
+        ),
+    ]
 
 ```
 
 
----
-## settingsapp\admin.py
-```py
+# FILE: menuapp\migrations\0003_extraservice.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-14 00:06
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('menuapp', '0002_dish_price_dish_techcard'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='ExtraService',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=200, unique=True, verbose_name='Услуга')),
+                ('price', models.DecimalField(decimal_places=2, default=0, max_digits=12, verbose_name='Цена')),
+            ],
+        ),
+    ]
+
+```
+
+
+# FILE: menuapp\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: settingsapp\admin.py
+
+```python
 from django.contrib import admin
 
 # Register your models here.
@@ -1194,9 +2089,9 @@ from django.contrib import admin
 ```
 
 
----
-## settingsapp\apps.py
-```py
+# FILE: settingsapp\apps.py
+
+```python
 from django.apps import AppConfig
 
 
@@ -1207,9 +2102,9 @@ class SettingsappConfig(AppConfig):
 ```
 
 
----
-## settingsapp\forms.py
-```py
+# FILE: settingsapp\forms.py
+
+```python
 from django import forms
 from calendarapp.models import Hall
 from employees.models import PayrollSettings
@@ -1223,9 +2118,9 @@ class PayrollSettingsForm(forms.ModelForm):
 ```
 
 
----
-## settingsapp\models.py
-```py
+# FILE: settingsapp\models.py
+
+```python
 from django.db import models
 
 # Create your models here.
@@ -1233,9 +2128,9 @@ from django.db import models
 ```
 
 
----
-## settingsapp\tests.py
-```py
+# FILE: settingsapp\tests.py
+
+```python
 from django.test import TestCase
 
 # Create your tests here.
@@ -1243,9 +2138,9 @@ from django.test import TestCase
 ```
 
 
----
-## settingsapp\urls.py
-```py
+# FILE: settingsapp\urls.py
+
+```python
 from django.urls import path
 from .views import SettingsHomeView, HallListView, HallCreateView, PayrollSettingsView
 
@@ -1260,9 +2155,9 @@ urlpatterns = [
 ```
 
 
----
-## settingsapp\views.py
-```py
+# FILE: settingsapp\views.py
+
+```python
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic
 from django.shortcuts import redirect
@@ -1296,15 +2191,374 @@ class PayrollSettingsView(LoginRequiredMixin, generic.FormView):
 ```
 
 
----
-## settingsapp\__init__.py
-```py
+# FILE: settingsapp\__init__.py
+
+```python
 
 ```
 
 
----
-## templates\base.html
+# FILE: settingsapp\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: static\css\app.css
+
+```css
+.calendar-grid{background:#fff;border-radius:.5rem;padding:.5rem}
+
+body { background:#f7f7fb; }
+.card { border-radius: .8rem; border: 1px solid #eee; }
+.form-control, .form-select { border-radius:.6rem; }
+.table th, .table td { vertical-align: middle; }
+.table { --bs-table-bg: #fff; border-radius:.6rem; overflow:hidden; }
+.btn { border-radius:.6rem; }
+.navbar { box-shadow: 0 2px 10px rgba(0,0,0,.03); }
+.alert { border-radius:.6rem; }
+
+
+```
+
+
+# FILE: stats\admin.py
+
+```python
+from django.contrib import admin
+
+# Register your models here.
+
+```
+
+
+# FILE: stats\apps.py
+
+```python
+from django.apps import AppConfig
+
+class StatsConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'stats'
+    verbose_name = 'Статистика'
+
+```
+
+
+# FILE: stats\models.py
+
+```python
+from django.db import models
+
+# Create your models here.
+
+```
+
+
+# FILE: stats\tests.py
+
+```python
+from django.test import TestCase
+
+# Create your tests here.
+
+```
+
+
+# FILE: stats\urls.py
+
+```python
+from django.urls import path
+from .views import DashboardStatsView
+app_name='stats'
+urlpatterns = [ path('', DashboardStatsView.as_view(), name='dashboard') ]
+
+```
+
+
+# FILE: stats\views.py
+
+```python
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import generic
+from django.db.models import Sum
+from django.utils import timezone
+from expenses.models import Expense
+from employees.models import PayrollSettings
+from calendarapp.models import Event
+
+class DashboardStatsView(LoginRequiredMixin, generic.TemplateView):
+    template_name = 'stats/dashboard.html'
+    def get_context_data(self, **kw):
+        ctx = super().get_context_data(**kw)
+        d1 = self.request.GET.get('date_from'); d2 = self.request.GET.get('date_to')
+        ev = Event.objects.all()
+        ex = Expense.objects.all()
+        if d1: ev = ev.filter(date__gte=d1); ex = ex.filter(date__gte=d1)
+        if d2: ev = ev.filter(date__lte=d2); ex = ex.filter(date__lte=d2)
+        revenue = ev.filter(status='paid').aggregate(s=Sum('prepayment_amount'))['s'] or 0
+        expenses = ex.aggregate(s=Sum('amount'))['s'] or 0
+        ps = PayrollSettings.objects.first()
+        kitchen_pct = ps.kitchen_percent if ps else 4
+        service_pct = ps.service_percent if ps else 6
+        kitchen = revenue * (kitchen_pct/100)
+        service = revenue * (service_pct/100)
+        profit = revenue - (expenses + kitchen + service)
+        ctx.update(dict(
+            date_from=d1, date_to=d2, revenue=revenue, expenses=expenses,
+            kitchen=kitchen, service=service, profit=profit,
+            kitchen_pct=kitchen_pct, service_pct=service_pct,
+        ))
+        return ctx
+
+```
+
+
+# FILE: stats\__init__.py
+
+```python
+
+```
+
+
+# FILE: stats\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: taskapp\admin.py
+
+```python
+from django.contrib import admin
+
+# Register your models here.
+
+```
+
+
+# FILE: taskapp\apps.py
+
+```python
+from django.apps import AppConfig
+
+class TaskappConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'taskapp'
+    verbose_name = 'Задачи'
+
+```
+
+
+# FILE: taskapp\forms.py
+
+```python
+from django import forms
+from .models import Task
+
+class TaskForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = ['task_type','description','deadline','responsible','status']
+        widgets = {'deadline': forms.DateTimeInput(attrs={'type':'datetime-local'})}
+        labels = {
+            'task_type': 'Тип',
+            'description': 'Описание',
+            'deadline': 'Дедлайн',
+            'responsible': 'Ответственный',
+            'status': 'Статус',
+        }
+
+```
+
+
+# FILE: taskapp\models.py
+
+```python
+from django.db import models
+from django.conf import settings
+
+class Task(models.Model):
+    STATUS_CHOICES = [('in_progress','В работе'), ('done','Завершена'), ('canceled','Отменена')]
+    TYPE_CHOICES = [('call','Звонок'), ('meeting','Встреча'), ('prepayment','Предоплата')]
+
+    event = models.ForeignKey('calendarapp.Event', on_delete=models.CASCADE, related_name='tasks', null=True, blank=True)
+    client = models.ForeignKey('crm.Client', on_delete=models.CASCADE, related_name='tasks', null=True, blank=True)
+
+    task_type = models.CharField('Тип', max_length=20, choices=TYPE_CHOICES, default='call')
+    description = models.CharField('Описание', max_length=300)
+    deadline = models.DateTimeField('Дедлайн', null=True, blank=True)
+    responsible = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name='Ответственный',
+                                    on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField('Статус', max_length=20, choices=STATUS_CHOICES, default='in_progress')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['status','deadline','-id']
+        verbose_name = 'Задача'
+        verbose_name_plural = 'Задачи'
+
+    def __str__(self):
+        return f"{self.get_task_type_display()}: {self.description[:30]}"
+
+```
+
+
+# FILE: taskapp\tests.py
+
+```python
+from django.test import TestCase
+
+# Create your tests here.
+
+```
+
+
+# FILE: taskapp\urls.py
+
+```python
+from django.urls import path
+from .views import EventTaskCreateView, TaskListView
+
+app_name = 'taskapp'
+urlpatterns = [
+    path('', TaskListView.as_view(), name='task_list'),
+    path('event/<int:event_id>/new/', EventTaskCreateView.as_view(), name='event_task_create'),
+]
+
+```
+
+
+# FILE: taskapp\views.py
+
+```python
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import generic
+from django.shortcuts import get_object_or_404
+from .models import Task
+from .forms import TaskForm
+from calendarapp.models import Event
+
+class EventTaskCreateView(LoginRequiredMixin, generic.CreateView):
+    model = Task
+    form_class = TaskForm
+    template_name = 'tasks/task_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.event = get_object_or_404(Event, pk=kwargs['event_id'])
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.instance.event = self.event
+        form.instance.client = self.event.client
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return f"/calendar/{self.event.pk}/"
+
+class TaskListView(LoginRequiredMixin, generic.ListView):
+    model = Task
+    template_name = 'tasks/task_list.html'
+    paginate_by = 50
+    def get_queryset(self):
+        qs = super().get_queryset()
+        s = self.request.GET.get('status')
+        if s:
+            qs = qs.filter(status=s)
+        return qs.select_related('event','client','responsible')
+
+```
+
+
+# FILE: taskapp\__init__.py
+
+```python
+
+```
+
+
+# FILE: taskapp\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-14 07:20
+
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ('calendarapp', '0003_event_extras_event_responsible_event_title_and_more'),
+        ('crm', '0001_initial'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Task',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('task_type', models.CharField(choices=[('call', 'Звонок'), ('meeting', 'Встреча'), ('prepayment', 'Предоплата')], default='call', max_length=20, verbose_name='Тип')),
+                ('description', models.CharField(max_length=300, verbose_name='Описание')),
+                ('deadline', models.DateTimeField(blank=True, null=True, verbose_name='Дедлайн')),
+                ('status', models.CharField(choices=[('in_progress', 'В работе'), ('done', 'Завершена'), ('canceled', 'Отменена')], default='in_progress', max_length=20, verbose_name='Статус')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Создано')),
+                ('client', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to='crm.client')),
+                ('event', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='tasks', to='calendarapp.event')),
+                ('responsible', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Ответственный')),
+            ],
+            options={
+                'verbose_name': 'Задача',
+                'verbose_name_plural': 'Задачи',
+                'ordering': ['status', 'deadline', '-id'],
+            },
+        ),
+    ]
+
+```
+
+
+# FILE: taskapp\migrations\0002_alter_task_created_at.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-14 09:18
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('taskapp', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AlterField(
+            model_name='task',
+            name='created_at',
+            field=models.DateTimeField(auto_now_add=True),
+        ),
+    ]
+
+```
+
+
+# FILE: taskapp\migrations\__init__.py
+
+```python
+
+```
+
+
+# FILE: templates\base.html
+
 ```html
 {% load static %}
 <!doctype html>
@@ -1363,8 +2617,8 @@ class PayrollSettingsView(LoginRequiredMixin, generic.FormView):
 ```
 
 
----
-## templates\landing.html
+# FILE: templates\landing.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}BanketPro — CRM для банкетов{% endblock %}
@@ -1391,97 +2645,136 @@ class PayrollSettingsView(LoginRequiredMixin, generic.FormView):
 ```
 
 
----
-## templates\calendar\event_detail.html
+# FILE: templates\calendar\event_detail.html
+
 ```html
-{% extends 'base.html' %}
-{% block title %}Мероприятие {{ object.date|date:"d.m.Y" }}{% endblock %}
-{% block content %}
+ {% extends 'base.html' %}
+ {% block title %}Мероприятие {{ object.date|date:"d.m.Y" }}{% endblock %}
+ {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h5 m-0">Мероприятие: {{ object.date|date:"d.m.Y" }} • {{ object.get_slot_display }} • {{ object.hall }}</h1>
-  <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:dashboard' %}">К дашборду</a>
-</div>
+ <div class="d-flex justify-content-between align-items-center mb-3">
+   <h1 class="h5 m-0">Мероприятие: {{ object.date|date:"d.m.Y" }} • {{ object.get_slot_display }} • {{ object.hall }}</h1>
+   <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:dashboard' %}">К дашборду</a>
+ </div>
 
-<div class="row g-3">
-  <div class="col-md-5">
-    <div class="card p-3 shadow-sm">
-      <div class="small text-muted mb-2">Клиент и параметры</div>
-      <div><strong>{{ object.client.full_name }}</strong> — <a href="tel:{{ object.client.phone }}">{{ object.client.phone }}</a></div>
-      <div class="text-muted small mt-2">Зал: {{ object.hall }}</div>
-      <div class="text-muted small">Гостей: {{ object.guests }}</div>
-      <div class="text-muted small">Статус: {{ object.get_status_display }}</div>
-      <div class="text-muted small">Предоплата: {{ object.prepayment_amount|default:"0" }}</div>
-      <div class="text-muted small">Меню: {% if object.client_menu %}{{ object.client_menu.title }}{% else %}—{% endif %}</div>
-      <div class="text-muted small">Доп.услуги:
-        {% for e in object.extras.all %}{{ e.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
-      </div>
-      {% if object.contract %}
-        <div class="small mt-2"><a href="{{ object.contract.url }}" target="_blank">Договор</a></div>
+ <div class="row g-3">
+   <div class="col-md-5">
+     <div class="card p-3 shadow-sm">
+       <div class="small text-muted mb-2">Клиент и параметры</div>
+        {% if object.responsible %}
+         <div class="text-muted small mb-2">
+          Создал: <strong>{{ object.responsible.get_full_name|default:object.responsible.username }}</strong>
+         </div>
       {% endif %}
-    </div>
-  </div>
+       <div><strong>{{ object.client.full_name }}</strong> — <a href="tel:{{ object.client.phone }}">{{ object.client.phone }}</a></div>
+       <div class="text-muted small mt-2">Зал: {{ object.hall }}</div>
+       <div class="text-muted small">Гостей: {{ object.guests }}</div>
+       <div class="text-muted small">Статус: {{ object.get_status_display }}</div>
+       <div class="text-muted small">Предоплата: {{ object.prepayment_amount|default:"0" }}</div>
+       <div class="text-muted small">Меню: {% if object.client_menu %}{{ object.client_menu.title }}{% else %}—{% endif %}</div>
+       <div class="text-muted small">Доп.услуги:
+         {% for e in object.extras.all %}{{ e.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+       </div>
+       {% if object.contract %}
+         <div class="small mt-2"><a href="{{ object.contract.url }}" target="_blank">Договор</a></div>
+       {% endif %}
+     </div>
+   </div>
 
-  <div class="col-md-7">
-    <div class="card p-3 shadow-sm">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div class="small text-muted">Задачи</div>
-        <a class="btn btn-sm btn-primary" href="{% url 'tasksapp:event_task_create' object.pk %}">+ Задача</a>
-      </div>
-      {% include "tasks/_task_inline_list.html" with tasks=object.tasks.all only %}
-    </div>
-  </div>
-</div>
+   <div class="col-md-7">
+     <div class="card p-3 shadow-sm">
+       <div class="d-flex justify-content-between align-items-center mb-2">
+         <div class="small text-muted">Задачи</div>
+-        <a class="btn btn-sm btn-primary" href="{% url 'taskapp:event_task_create' object.pk %}">+ Задача</a>
+       </div>
+       {% include "tasks/_task_inline_list.html" with tasks=object.tasks.all only %}
+     </div>
+   </div>
+ </div>
 
-{% endblock %}
+ {% endblock %}
 
 ```
 
 
----
-## templates\calendar\event_form.html
+# FILE: templates\calendar\event_form.html
+
 ```html
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block title %}Новое мероприятие{% endblock %}
 {% block content %}
-<h1 class="h5 mb-3">Добавить мероприятие</h1>
-<form method="post" enctype="multipart/form-data" class="card p-3 shadow-sm">{% csrf_token %}
+
+<h1 class="h5 mb-3">Новое мероприятие</h1>
+
+<form method="post" class="card p-3 shadow-sm">
+  {% csrf_token %}
+
   <div class="row g-3">
+    <!-- Клиент -->
     <div class="col-12">
-      <div class="form-check form-switch">
-        {{ form.new_client }} <label class="form-check-label" for="{{ form.new_client.id_for_label }}">Создать нового клиента</label>
-      </div>
+      <div class="small text-muted mb-1">Клиент</div>
     </div>
 
-    <div id="block-existing" class="col-md-6">
-      <label class="form-label">Клиент (поиск)</label>
-      <input type="text" class="form-control" id="clientSearch" placeholder="ФИО или телефон">
-      {{ form.client }}
+    {{ form.existing_client_id }}
+
+    <div class="col-md-6 position-relative">
+      <label class="form-label">ФИО</label>
+      {{ form.new_full_name }}
+      <!-- Контейнер подсказок -->
+      <div id="fio-suggest" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
+      <div class="form-text">Начните вводить ФИО — увидите до 3 подсказок из базы.</div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Телефон</label>
+      {{ form.new_phone }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Источник</label>
+      {{ form.new_source }}
+    </div>
+    <div class="col-12">
+      <label class="form-label">Описание</label>
+      {{ form.new_description }}
     </div>
 
-    <div id="block-new" class="col-12 row g-3" style="display:none">
-      <div class="col-md-6">{{ form.new_full_name.label_tag }} {{ form.new_full_name }}</div>
-      <div class="col-md-6">{{ form.new_phone.label_tag }} {{ form.new_phone }}</div>
-      <div class="col-md-6">{{ form.new_source.label_tag }} {{ form.new_source }}</div>
-      <div class="col-12">{{ form.new_description.label_tag }} {{ form.new_description }}</div>
+    <hr class="mt-2"/>
+
+    <!-- Мероприятие -->
+    <div class="col-md-4">
+      <label class="form-label">Зал</label>
+      {{ form.hall }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Дата</label>
+      {{ form.date }}
+    </div>
+    <div class="col-md-5">
+      <label class="form-label d-block">Время</label>
+      {{ form.slot_choice }}
     </div>
 
-    <div class="col-md-4">{{ form.date.label_tag }} {{ form.date }}</div>
-    <div class="col-md-4">{{ form.slot.label_tag }} {{ form.slot }}</div>
-    <div class="col-md-4">{{ form.slot_full }} {{ form.slot_full.label_tag }}</div>
+    <div class="col-12">
+      <label class="form-label">Название/повод</label>
+      {{ form.title }}
+    </div>
 
-    <div class="col-md-6">{{ form.hall.label_tag }} {{ form.hall }}</div>
-    <div class="col-md-6">{{ form.title.label_tag }} {{ form.title }}</div>
+    <div class="col-md-3">
+      <label class="form-label">Гости</label>
+      {{ form.guests }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Предоплата, ₽</label>
+      {{ form.prepayment_amount }}
+    </div>
 
-    <div class="col-md-4">{{ form.guests.label_tag }} {{ form.guests }}</div>
-    <div class="col-md-4">{{ form.client_menu.label_tag }} {{ form.client_menu }}</div>
-    <div class="col-md-4">{{ form.extras.label_tag }} {{ form.extras }}</div>
-
-    <div class="col-md-6">{{ form.prepayment_amount.label_tag }} {{ form.prepayment_amount }}</div>
-    <div class="col-md-6">{{ form.status.label_tag }} {{ form.status }}</div>
-
-    <div class="col-md-6">{{ form.contract.label_tag }} {{ form.contract }}</div>
-    <div class="col-md-6">{{ form.responsible.label_tag }} {{ form.responsible }}</div>
+    <div class="col-md-6">
+      <label class="form-label">Меню (выбор из добавленных блюд)</label>
+      {{ form.client_menu }}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Доп. услуги</label>
+      {{ form.extras }}
+    </div>
   </div>
 
   <div class="mt-3 d-flex gap-2">
@@ -1491,93 +2784,149 @@ class PayrollSettingsView(LoginRequiredMixin, generic.FormView):
 </form>
 
 <script>
-const blockNew = document.getElementById('block-new');
-const blockExist = document.getElementById('block-existing');
-function toggleNew(){ const on = document.querySelector('[name="new_client"]').checked; blockNew.style.display = on?'':'none'; blockExist.style.display = on?'none':''; }
-document.querySelector('[name="new_client"]').addEventListener('change', toggleNew); toggleNew();
+(function() {
+  const input = document.getElementById("id_new_full_name");
+  const container = document.getElementById("fio-suggest");
+  const hiddenId = document.getElementById("id_existing_client_id");
+  const phoneInput = document.getElementById("id_new_phone");
+  const sourceSelect = document.getElementById("id_new_source");
+  const descInput = document.getElementById("id_new_description");
 
-const input = document.getElementById('clientSearch'); const select = document.getElementById('id_client');
-if (input){
-  let t=null;
-  input.addEventListener('input', ()=>{
-    clearTimeout(t);
-    t = setTimeout(async ()=>{
-      const q = input.value.trim(); if(!q){ return; }
-      const r = await fetch(`/crm/clients/search?q=${encodeURIComponent(q)}`);
-      const items = await r.json(); select.innerHTML = '';
-      items.forEach(it=>{
-        const opt = document.createElement('option');
-        opt.value = it.id; opt.textContent = `${it.full_name} — ${it.phone}`;
-        select.appendChild(opt);
-      });
-    }, 250);
+  if (!input || !container) return;
+
+  const url = input.getAttribute('data-autocomplete-url');
+  let timer = null;
+
+  function clearSuggest() {
+    container.innerHTML = "";
+    container.style.display = "none";
+  }
+
+  function render(items) {
+    clearSuggest();
+    if (!items.length) return;
+    container.style.display = "block";
+    items.forEach(item => {
+      const a = document.createElement('a');
+      a.href = "javascript:void(0)";
+      a.className = "list-group-item list-group-item-action";
+      a.textContent = item.label + (item.phone ? " — " + item.phone : "");
+      a.onclick = () => {
+        input.value = item.label;
+        hiddenId.value = item.id;
+        if (phoneInput) phoneInput.value = item.phone || "";
+        if (sourceSelect && item.source) sourceSelect.value = item.source;
+        if (descInput) descInput.value = item.description || "";
+        clearSuggest();
+      };
+      container.appendChild(a);
+    });
+  }
+
+  input.addEventListener('input', function() {
+    hiddenId.value = ""; // сбрасываем связку, если пользователь правит ФИО
+    const q = input.value.trim();
+    if (timer) clearTimeout(timer);
+    if (!q) return clearSuggest();
+    timer = setTimeout(() => {
+      fetch(url + "?q=" + encodeURIComponent(q), {headers: {'X-Requested-With':'XMLHttpRequest'}})
+        .then(r => r.json())
+        .then(data => render((data && data.results) || []))
+        .catch(() => clearSuggest());
+    }, 220);
   });
-}
+
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target) && e.target !== input) {
+      clearSuggest();
+    }
+  });
+})();
 </script>
+
 {% endblock %}
 
 ```
 
 
----
-## templates\crm\client_detail.html
+# FILE: templates\crm\client_detail.html
+
 ```html
-{% extends 'base.html' %}
-{% block title %}Клиент {{ object.full_name }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}Клиент: {{ object.full_name }}{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h5 m-0">Клиент: {{ object.full_name }}</h1>
-  <div>
-    <a class="btn btn-outline-primary btn-sm" href="{% url 'crm:client_update' object.pk %}">Редактировать</a>
-  </div>
+  <h1 class="h5 m-0">{{ object.full_name }}</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:client_update' object.pk %}">Редактировать</a>
 </div>
 
 <div class="row g-3">
-  <div class="col-md-4">
+  <div class="col-lg-5">
     <div class="card p-3 shadow-sm">
       <div class="small text-muted mb-2">Контакты</div>
-      <div><strong>Телефон:</strong> <a href="tel:{{ object.phone }}">{{ object.phone|default:"—" }}</a></div>
-      <div><strong>Источник:</strong> {{ object.source|default:"—" }}</div>
-      <div><strong>Описание:</strong> {{ object.description|default:"—" }}</div>
-      <div class="text-muted small mt-2">Создан: {{ object.created_at|date:"d.m.Y H:i" }}</div>
-    </div>
-    <div class="card p-3 shadow-sm mt-3">
-      <div class="small text-muted mb-2">Действия</div>
-      <a class="btn btn-primary w-100" href="{% url 'calendarapp:event_create' %}?client={{ object.pk }}">+ Добавить мероприятие</a>
+      <div><strong>Телефон:</strong> <a href="tel:{{ object.phone }}">{{ object.phone }}</a></div>
+      {% if object.source %}<div><strong>Источник:</strong> {{ object.source }}</div>{% endif %}
+      {% if object.description %}<div class="mt-2 text-muted">{{ object.description }}</div>{% endif %}
     </div>
   </div>
-  <div class="col-md-8">
+
+  <div class="col-lg-7">
     <div class="card p-3 shadow-sm">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <div class="small text-muted">Мероприятия клиента</div>
+        <div class="small text-muted">Мероприятия</div>
+        <a class="btn btn-primary btn-sm" href="{% url 'calendarapp:event_create' %}?client={{ object.pk }}">+ Добавить</a>
       </div>
-      <table class="table table-sm align-middle">
-        <thead><tr><th>Дата</th><th>Слот</th><th>Зал</th><th>Статус</th><th>Предоплата</th></tr></thead>
-        <tbody>
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr class="text-muted small">
+              <th>Дата</th>
+              <th>Время</th>
+              <th>Зал</th>
+              <th>Статус</th>
+              <th>Предоплата</th>
+            </tr>
+          </thead>
+          <tbody>
           {% for e in events %}
-          <tr>
-                <td><a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.date|date:"d.m.Y" }}</a></td>
-                <td><a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.get_slot_display }}</a></td>
-                <td>{{ e.hall }}</td>
-                <td><span class="badge bg-secondary">{{ e.get_status_display }}</span></td>
-                <td>{{ e.prepayment_amount|default:"0" }}</td>
-              </tr>
-                {% empty %}
-              <tr><td colspan="5" class="text-muted">Нет мероприятий</td></tr>
-         {% endfor %}
-        </tbody>
-      </table>
+            <tr>
+              <td>
+                <a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.date|date:"d.m.Y" }}</a>
+              </td>
+              <td>
+                <a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.get_slot_display }}</a>
+              </td>
+              <td>{{ e.hall }}</td>
+              <td>
+                <span class="badge
+                  {% if e.status == 'paid' %} bg-success
+                  {% elif e.status == 'confirmed' %} bg-primary
+                  {% elif e.status == 'pending' %} bg-warning text-dark
+                  {% elif e.status == 'canceled' %} bg-danger
+                  {% else %} bg-secondary {% endif %}">
+                  {{ e.get_status_display }}
+                </span>
+              </td>
+              <td>{{ e.prepayment_amount|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted">Нет мероприятий</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
-
 {% endblock %}
 
 ```
 
 
----
-## templates\crm\client_form.html
+# FILE: templates\crm\client_form.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Клиент{% endblock %}
@@ -1600,8 +2949,8 @@ if (input){
 ```
 
 
----
-## templates\crm\client_list.html
+# FILE: templates\crm\client_list.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Клиенты{% endblock %}
@@ -1654,8 +3003,8 @@ if (input){
 ```
 
 
----
-## templates\crm\dashboard.html
+# FILE: templates\crm\dashboard.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Рабочий стол • BanketPro{% endblock %}
@@ -1794,8 +3143,8 @@ if (input){
 ```
 
 
----
-## templates\employees\employee_form.html
+# FILE: templates\employees\employee_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новый сотрудник{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить сотрудника</h1>
@@ -1806,8 +3155,8 @@ if (input){
 ```
 
 
----
-## templates\employees\employee_list.html
+# FILE: templates\employees\employee_list.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Сотрудники{% endblock %}
@@ -1838,8 +3187,8 @@ if (input){
 ```
 
 
----
-## templates\employees\payroll_calc.html
+# FILE: templates\employees\payroll_calc.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Расчёт ЗП{% endblock %}
@@ -1856,8 +3205,8 @@ if (input){
 ```
 
 
----
-## templates\employees\timesheet_week.html
+# FILE: templates\employees\timesheet_week.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Табель — неделя{% endblock %}
@@ -1906,8 +3255,8 @@ if (input){
 ```
 
 
----
-## templates\expenses\expense_form.html
+# FILE: templates\expenses\expense_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новый расход{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить расход</h1>
@@ -1918,8 +3267,8 @@ if (input){
 ```
 
 
----
-## templates\expenses\expense_list.html
+# FILE: templates\expenses\expense_list.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Расходы{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Расходы</h1>
@@ -1954,8 +3303,8 @@ if (input){
 ```
 
 
----
-## templates\menu\clientmenu_detail.html
+# FILE: templates\menu\clientmenu_detail.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Меню клиента{% endblock %}
@@ -1981,8 +3330,8 @@ if (input){
 ```
 
 
----
-## templates\menu\clientmenu_form.html
+# FILE: templates\menu\clientmenu_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Меню для клиента{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить меню для клиента</h1>
@@ -1993,8 +3342,8 @@ if (input){
 ```
 
 
----
-## templates\menu\dishgroup_form.html
+# FILE: templates\menu\dishgroup_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новая группа блюд{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить группу блюд</h1>
@@ -2005,8 +3354,8 @@ if (input){
 ```
 
 
----
-## templates\menu\dish_form.html
+# FILE: templates\menu\dish_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новое блюдо{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить блюдо</h1>
@@ -2017,8 +3366,8 @@ if (input){
 ```
 
 
----
-## templates\menu\dish_list.html
+# FILE: templates\menu\dish_list.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Меню — блюда{% endblock %}
@@ -2049,8 +3398,8 @@ if (input){
 ```
 
 
----
-## templates\registration\logged_out.html
+# FILE: templates\registration\logged_out.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Вы вышли • BanketPro{% endblock %}
@@ -2061,8 +3410,8 @@ if (input){
 ```
 
 
----
-## templates\registration\login.html
+# FILE: templates\registration\login.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Войти • BanketPro{% endblock %}
@@ -2089,8 +3438,8 @@ if (input){
 ```
 
 
----
-## templates\settingsapp\hall_form.html
+# FILE: templates\settingsapp\hall_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новый зал{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить зал</h1>
@@ -2101,8 +3450,8 @@ if (input){
 ```
 
 
----
-## templates\settingsapp\hall_list.html
+# FILE: templates\settingsapp\hall_list.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Залы{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Залы</h1>
@@ -2116,8 +3465,8 @@ if (input){
 ```
 
 
----
-## templates\settingsapp\home.html
+# FILE: templates\settingsapp\home.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Настройки{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Настройки</h1>
@@ -2132,8 +3481,8 @@ if (input){
 ```
 
 
----
-## templates\settingsapp\payroll_form.html
+# FILE: templates\settingsapp\payroll_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Проценты ЗП{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Проценты ЗП</h1>
@@ -2144,8 +3493,8 @@ if (input){
 ```
 
 
----
-## templates\stats\dashboard.html
+# FILE: templates\stats\dashboard.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Статистика{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Статистика</h1>
@@ -2165,8 +3514,8 @@ if (input){
 ```
 
 
----
-## templates\tasks\task_form.html
+# FILE: templates\tasks\task_form.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Новая задача{% endblock %}
@@ -2187,8 +3536,8 @@ if (input){
 ```
 
 
----
-## templates\tasks\task_list.html
+# FILE: templates\tasks\task_list.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}Задачи{% endblock %}
@@ -2228,8 +3577,8 @@ if (input){
 ```
 
 
----
-## templates\tasks\_task_inline_list.html
+# FILE: templates\tasks\_task_inline_list.html
+
 ```html
 <ul class="list-group list-group-flush">
   {% for t in tasks %}
@@ -2258,8 +3607,20 @@ if (input){
 ```
 
 
----
-## templates\warehouse\product_form.html
+# FILE: templates\warehouse\inventory_form.html
+
+```html
+{% extends 'base.html' %}{% block title %}Инвентаризация{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Инвентаризация (корректировка)</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-primary">Сохранить</button>
+</form>{% endblock %}
+
+```
+
+
+# FILE: templates\warehouse\product_form.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Новый товар{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Добавить товар</h1>
@@ -2270,8 +3631,8 @@ if (input){
 ```
 
 
----
-## templates\warehouse\product_list.html
+# FILE: templates\warehouse\product_list.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Склад — номенклатура{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Номенклатура</h1>
@@ -2306,8 +3667,32 @@ if (input){
 ```
 
 
----
-## templates\warehouse\supplier_list.html
+# FILE: templates\warehouse\stockin_form.html
+
+```html
+{% extends 'base.html' %}{% block title %}Приход товара{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Приход товара</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-primary">Сохранить</button>
+</form>{% endblock %}
+
+```
+
+
+# FILE: templates\warehouse\stockmove_form.html
+
+```html
+{% extends 'base.html' %}{% block title %}Списание товара{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Списание товара</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-danger">Списать</button>
+</form>{% endblock %}
+
+```
+
+
+# FILE: templates\warehouse\supplier_list.html
+
 ```html
 {% extends 'base.html' %}{% block title %}Поставщики{% endblock %}{% block content %}
 <h1 class="h4 mb-3">Поставщики</h1>
@@ -2323,8 +3708,20 @@ if (input){
 ```
 
 
----
-## templates\warehouse\techcard_detail.html
+# FILE: templates\warehouse\techcardingredient_form.html
+
+```html
+{% extends 'base.html' %}{% block title %}Ингредиент ТТК{% endblock %}{% block content %}
+<h1 class="h5 mb-3">Добавить ингредиент</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-primary">Сохранить</button>
+</form>{% endblock %}
+
+```
+
+
+# FILE: templates\warehouse\techcard_detail.html
+
 ```html
 {% extends 'base.html' %}
 {% block title %}ТТК: {{ object.title }}{% endblock %}
@@ -2355,8 +3752,47 @@ if (input){
 ```
 
 
----
-## templates\_partials\pagination.html
+# FILE: templates\warehouse\techcard_form.html
+
+```html
+{% extends 'base.html' %}{% block title %}Новая ТТК{% endblock %}{% block content %}
+<h1 class="h4 mb-3">Добавить ТТК</h1>
+<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
+  <button class="btn btn-primary">Сохранить</button>
+</form>{% endblock %}
+
+```
+
+
+# FILE: templates\warehouse\techcard_list.html
+
+```html
+{% extends 'base.html' %}{% block title %}ТТК{% endblock %}{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 m-0">Технологические карты</h1>
+  <a class="btn btn-primary" href="{% url 'warehouse:techcard_create' %}">+ ТТК</a>
+</div>
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>Название</th><th class="text-end">Выход, г</th><th></th></tr></thead>
+  <tbody>
+    {% for t in object_list %}
+      <tr>
+        <td>{{ t.title }}</td>
+        <td class="text-end">{{ t.output_grams }}</td>
+        <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="{% url 'warehouse:techcard_detail' t.pk %}">Открыть</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="text-muted">Пока нет ТТК</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+```
+
+
+# FILE: templates\_partials\pagination.html
+
 ```html
 {% if page_obj and page_obj.has_other_pages %}
 <nav>
@@ -2387,9 +3823,9 @@ if (input){
 ```
 
 
----
-## warehouse\admin.py
-```py
+# FILE: warehouse\admin.py
+
+```python
 from django.contrib import admin
 
 # Register your models here.
@@ -2397,9 +3833,9 @@ from django.contrib import admin
 ```
 
 
----
-## warehouse\apps.py
-```py
+# FILE: warehouse\apps.py
+
+```python
 from django.apps import AppConfig
 
 
@@ -2410,9 +3846,9 @@ class WarehouseConfig(AppConfig):
 ```
 
 
----
-## warehouse\forms.py
-```py
+# FILE: warehouse\forms.py
+
+```python
 from django import forms
 from .models import Product, Supplier, StockIn, StockMove, InventoryAdjustment, TechCard, TechCardIngredient
 
@@ -2469,9 +3905,9 @@ class TechCardIngredientForm(forms.ModelForm):
 ```
 
 
----
-## warehouse\models.py
-```py
+# FILE: warehouse\models.py
+
+```python
 from decimal import Decimal
 from django.db import models
 
@@ -2562,9 +3998,9 @@ class TechCardIngredient(models.Model):
 ```
 
 
----
-## warehouse\services.py
-```py
+# FILE: warehouse\services.py
+
+```python
 from decimal import Decimal
 
 
@@ -2590,9 +4026,9 @@ def apply_inventory_adjustment(product, delta):
 ```
 
 
----
-## warehouse\tests.py
-```py
+# FILE: warehouse\tests.py
+
+```python
 from django.test import TestCase
 
 # Create your tests here.
@@ -2600,9 +4036,9 @@ from django.test import TestCase
 ```
 
 
----
-## warehouse\urls.py
-```py
+# FILE: warehouse\urls.py
+
+```python
 from django.urls import path
 from . import views
 
@@ -2627,9 +4063,9 @@ urlpatterns = [
 ```
 
 
----
-## warehouse\views.py
-```py
+# FILE: warehouse\views.py
+
+```python
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import generic
 from django.http import HttpResponse
@@ -2720,8 +4156,179 @@ def index(request):
 ```
 
 
----
-## warehouse\__init__.py
-```py
+# FILE: warehouse\__init__.py
+
+```python
+
+```
+
+
+# FILE: warehouse\migrations\0001_initial.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 19:36
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Product',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=200, unique=True, verbose_name='Товар')),
+                ('unit', models.CharField(choices=[('шт', 'шт'), ('кг', 'кг'), ('г', 'г'), ('л', 'л'), ('мл', 'мл')], default='шт', max_length=5, verbose_name='Ед.изм.')),
+                ('last_price', models.DecimalField(decimal_places=2, default=0, max_digits=12, verbose_name='Последняя цена за ед.')),
+                ('stock_qty', models.DecimalField(decimal_places=3, default=0, max_digits=12, verbose_name='Остаток')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Supplier',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=200, verbose_name='Поставщик')),
+                ('phone', models.CharField(blank=True, max_length=50, verbose_name='Телефон')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='TechCard',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('title', models.CharField(max_length=200, unique=True, verbose_name='Название блюда')),
+                ('output_grams', models.PositiveIntegerField(default=0, verbose_name='Выход, г')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='InventoryAdjustment',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField()),
+                ('delta', models.DecimalField(decimal_places=3, max_digits=12, verbose_name='Корректировка')),
+                ('note', models.CharField(blank=True, max_length=200, verbose_name='Примечание')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='adjustments', to='warehouse.product')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='StockMove',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField()),
+                ('qty', models.DecimalField(decimal_places=3, max_digits=12, verbose_name='Кол-во (минус)')),
+                ('reason', models.CharField(blank=True, max_length=200, verbose_name='Причина')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='moves', to='warehouse.product')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='StockIn',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('date', models.DateField()),
+                ('qty', models.DecimalField(decimal_places=3, max_digits=12)),
+                ('price_per_unit', models.DecimalField(decimal_places=2, max_digits=12)),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='ins', to='warehouse.product')),
+                ('supplier', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='warehouse.supplier')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='TechCardIngredient',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('qty', models.DecimalField(decimal_places=3, max_digits=12, verbose_name='Кол-во на блюдо')),
+                ('loss_percent', models.PositiveIntegerField(default=0, verbose_name='Потери, %')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='warehouse.product')),
+                ('techcard', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='ingredients', to='warehouse.techcard')),
+            ],
+        ),
+    ]
+
+```
+
+
+# FILE: warehouse\migrations\0002_product_is_active_stockin_note_supplier_note_and_more.py
+
+```python
+# Generated by Django 5.2.6 on 2025-09-10 21:16
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('warehouse', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='product',
+            name='is_active',
+            field=models.BooleanField(default=True, verbose_name='Активен'),
+        ),
+        migrations.AddField(
+            model_name='stockin',
+            name='note',
+            field=models.CharField(blank=True, max_length=200, verbose_name='Примечание'),
+        ),
+        migrations.AddField(
+            model_name='supplier',
+            name='note',
+            field=models.CharField(blank=True, max_length=200, verbose_name='Примечание'),
+        ),
+        migrations.AlterField(
+            model_name='inventoryadjustment',
+            name='date',
+            field=models.DateField(verbose_name='Дата'),
+        ),
+        migrations.AlterField(
+            model_name='inventoryadjustment',
+            name='delta',
+            field=models.DecimalField(decimal_places=3, max_digits=12, verbose_name='Корректировка (+/-)'),
+        ),
+        migrations.AlterField(
+            model_name='product',
+            name='unit',
+            field=models.CharField(choices=[('шт', 'шт'), ('кг', 'кг'), ('г', 'г'), ('л', 'л'), ('мл', 'мл')], default='шт', max_length=5, verbose_name='Ед. изм.'),
+        ),
+        migrations.AlterField(
+            model_name='stockin',
+            name='date',
+            field=models.DateField(verbose_name='Дата'),
+        ),
+        migrations.AlterField(
+            model_name='stockin',
+            name='price_per_unit',
+            field=models.DecimalField(decimal_places=2, max_digits=12, verbose_name='Цена за ед.'),
+        ),
+        migrations.AlterField(
+            model_name='stockin',
+            name='qty',
+            field=models.DecimalField(decimal_places=3, max_digits=12, verbose_name='Кол-во'),
+        ),
+        migrations.AlterField(
+            model_name='stockmove',
+            name='date',
+            field=models.DateField(verbose_name='Дата'),
+        ),
+        migrations.AlterField(
+            model_name='supplier',
+            name='name',
+            field=models.CharField(max_length=200, unique=True, verbose_name='Поставщик'),
+        ),
+    ]
+
+```
+
+
+# FILE: warehouse\migrations\__init__.py
+
+```python
 
 ```

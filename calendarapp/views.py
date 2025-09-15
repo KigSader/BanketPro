@@ -1,135 +1,64 @@
-from django import forms
 from django.views import generic
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse
-from crm.models import Client
 from .models import Event
 from datetime import date, timedelta
 import calendar as pycal
 from django.utils import timezone
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.views.generic import FormView
+from django.db import transaction
+from django.contrib.auth.decorators import login_required
+from .forms import EventCreateForm
+from crm.models import Client
+from django.shortcuts import redirect
 
-class EventForm(forms.ModelForm):
-    # Полный день (второй слот создадим в form_valid)
-    slot_full = forms.BooleanField(label='Полный день', required=False)
 
-    # Создание НОВОГО клиента прямо из формы
-    new_client = forms.BooleanField(label='Создать нового клиента', required=False)
-    new_full_name = forms.CharField(label='ФИО', required=False)
-    new_phone = forms.CharField(label='Телефон', required=False)
-    new_source = forms.CharField(label='Источник', required=False)
-    new_description = forms.CharField(label='Описание', required=False,
-                                      widget=forms.Textarea(attrs={'rows':2,'placeholder':'Краткая заметка'}))
-
-    class Meta:
-        model = Event
-        fields = ['client','hall','date','slot','title','status','guests',
-                  'client_menu','extras','contract','prepayment_amount','responsible']
-        labels = {
-            'client': 'Клиент',
-            'hall': 'Зал',
-            'date': 'Дата',
-            'slot': 'Время',
-            'title': 'Название/повод',
-            'status': 'Статус',
-            'guests': 'Количество гостей',
-            'client_menu': 'Меню',
-            'extras': 'Доп. услуги',
-            'contract': 'Договор',
-            'prepayment_amount': 'Предоплата, ₽',
-            'responsible': 'Ответственный',
-        }
-        widgets = {
-            'date': forms.DateInput(attrs={'type':'date'}),
-            'slot': forms.Select(attrs={'class':'form-select'}),
-            'status': forms.Select(attrs={'class':'form-select'}),
-            'client': forms.Select(attrs={'class':'form-select'}),
-            'hall': forms.Select(attrs={'class':'form-select'}),
-            'client_menu': forms.Select(attrs={'class':'form-select'}),
-            'extras': forms.SelectMultiple(attrs={'size':6, 'class':'form-select'}),
-            'title': forms.TextInput(attrs={'placeholder':'Напр., Юбилей, Свадьба'}),
-            'prepayment_amount': forms.NumberInput(attrs={'step':'0.01','min':'0'}),
-            'guests': forms.NumberInput(attrs={'min':'0'}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        req = kwargs.pop('request', None)  # <- забираем request (чтобы не был unexpected kwarg)
-        super().__init__(*args, **kwargs)
-        if req:
-            d = req.GET.get('date')
-            s = req.GET.get('slot')
-            cid = req.GET.get('client')
-            if d:
-                self.fields['date'].initial = d
-            if s in ('am', 'pm'):
-                self.fields['slot'].initial = s
-            if s == 'full':
-                # галочка "Полный день" — дублируем второй слот в form_valid
-                self.fields['slot_full'].initial = True
-            if cid:
-                self.fields['client'].initial = cid
-
-    def clean(self):
-        data = super().clean()
-        # Валидация "нового клиента"
-        if data.get('new_client'):
-            fn = (data.get('new_full_name') or '').strip()
-            ph = (data.get('new_phone') or '').strip()
-            if not fn:
-                self.add_error('new_full_name', 'Укажите ФИО')
-            if not ph:
-                self.add_error('new_phone', 'Укажите телефон')
-        else:
-            if not data.get('client'):
-                self.add_error('client', 'Выберите клиента или создайте нового')
-        return data
-
-class EventCreateView(LoginRequiredMixin, generic.CreateView):
-    model = Event
-    form_class = EventForm
+class EventCreateView(LoginRequiredMixin, FormView):
     template_name = 'calendar/event_form.html'
+    form_class = EventCreateForm
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        # ВАЖНО: передаём request → форма его "pop" в __init__
+        # Передаём request, чтобы форма смогла проставить initial из GET (?date=&hall=&slot=)
         kwargs['request'] = self.request
         return kwargs
 
     def form_valid(self, form):
-        # Забираем флаг "полный день" ДО сохранения (иначе KeyError/TypeError)
-        full = form.cleaned_data.pop('slot_full', False)
+        with transaction.atomic():
+            event = form.save(user=self.request.user, commit=True)
+        # Сразу уводим на карточку созданного мероприятия
+        return redirect('calendarapp:event_detail', pk=event.pk)
 
-        # Создадим клиента при необходимости
-        if form.cleaned_data.get('new_client'):
-            client = Client.objects.create(
-                full_name=form.cleaned_data['new_full_name'],
-                phone=form.cleaned_data['new_phone'],
-                source=form.cleaned_data.get('new_source', ''),
-                description=form.cleaned_data.get('new_description', '')
-            )
-            form.instance.client = client
 
-        # Сохраняем первое событие
-        response = super().form_valid(form)
+@login_required
+def client_suggest(request):
+    """
+    Подсказки по ФИО: до 3 вариантов по вхождению, нечувствительно к регистру.
+    ?q=иванов
+    """
+    q = (request.GET.get('q') or '').strip()
+    if not q:
+        return JsonResponse({'results': []})
 
-        # Дублируем второй слот, если "Полный день"
-        if full:
-            other = 'pm' if self.object.slot == 'am' else 'am'
-            Event.objects.create(
-                client=self.object.client, hall=self.object.hall,
-                date=self.object.date, slot=other,
-                title=self.object.title, status=self.object.status,
-                guests=self.object.guests, client_menu=self.object.client_menu,
-                prepayment_amount=self.object.prepayment_amount,
-                responsible=self.object.responsible,
-            )
-        return response
+    qs = (Client.objects
+          .filter(full_name__icontains=q)
+          .order_by('full_name')[:3])
+    data = [
+        {
+            'id': c.id,
+            'label': c.full_name,
+            'phone': c.phone or '',
+            'source': c.source or '',
+            'description': c.description or '',
+        } for c in qs
+    ]
+    return JsonResponse({'results': data})
 
-    def get_success_url(self):
-        return reverse('calendarapp:event_detail', args=[self.object.pk])
 
 class EventDetailView(LoginRequiredMixin, generic.DetailView):
     model = Event
     template_name = 'calendar/event_detail.html'
+
 
 class CalendarView(LoginRequiredMixin, generic.TemplateView):
     """
@@ -160,7 +89,7 @@ class CalendarView(LoginRequiredMixin, generic.TemplateView):
             Event.objects
             .filter(date__gte=start, date__lte=end)
             .select_related('client', 'hall')
-            .only('id','date','slot','status','client__full_name','hall__name')
+            .only('id', 'date', 'slot', 'status', 'client__full_name', 'hall__name')
         )
         # Группируем события по дате
         events_by_date = {}

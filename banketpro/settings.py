@@ -60,20 +60,24 @@ TEMPLATES = [{
 WSGI_APPLICATION = 'banketpro.wsgi.application'
 
 # DB: по умолчанию SQLite (простая локальная разработка)
-ENGINE = config('DB_ENGINE', default='django.db.backends.sqlite3')
-if ENGINE == 'django.db.backends.sqlite3':
-    DATABASES = {'default': {'ENGINE': ENGINE, 'NAME': BASE_DIR / 'db.sqlite3'}}
+# База данных: SQLite по умолчанию; Postgres по переменным окружения
+if config('DB_ENGINE', default='django.db.backends.sqlite3') == 'django.db.backends.sqlite3':
+    DATABASES = {
+       'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 else:
     DATABASES = {
         'default': {
-            'ENGINE': ENGINE,
-            'NAME': config('DB_NAME', default='banketpro'),
-            'USER': config('DB_USER', default='postgres'),
-            'PASSWORD': config('DB_PASSWORD', default='postgres'),
+            'ENGINE': config('DB_ENGINE'),
+            'NAME': config('DB_NAME'),
+            'USER': config('DB_USER'),
+            'PASSWORD': config('DB_PASSWORD'),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='5432'),
-            'OPTIONS': {'client_encoding': 'UTF8'},
-        }
+       }
     }
 
 AUTH_PASSWORD_VALIDATORS = [

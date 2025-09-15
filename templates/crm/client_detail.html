@@ -1,50 +1,69 @@
-{% extends 'base.html' %}
-{% block title %}Клиент {{ object.full_name }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}Клиент: {{ object.full_name }}{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h5 m-0">Клиент: {{ object.full_name }}</h1>
-  <div>
-    <a class="btn btn-outline-primary btn-sm" href="{% url 'crm:client_update' object.pk %}">Редактировать</a>
-  </div>
+  <h1 class="h5 m-0">{{ object.full_name }}</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:client_update' object.pk %}">Редактировать</a>
 </div>
 
 <div class="row g-3">
-  <div class="col-md-4">
+  <div class="col-lg-5">
     <div class="card p-3 shadow-sm">
       <div class="small text-muted mb-2">Контакты</div>
-      <div><strong>Телефон:</strong> <a href="tel:{{ object.phone }}">{{ object.phone|default:"—" }}</a></div>
-      <div><strong>Источник:</strong> {{ object.source|default:"—" }}</div>
-      <div><strong>Описание:</strong> {{ object.description|default:"—" }}</div>
-      <div class="text-muted small mt-2">Создан: {{ object.created_at|date:"d.m.Y H:i" }}</div>
-    </div>
-    <div class="card p-3 shadow-sm mt-3">
-      <div class="small text-muted mb-2">Действия</div>
-      <a class="btn btn-primary w-100" href="{% url 'calendarapp:event_create' %}?client={{ object.pk }}">+ Добавить мероприятие</a>
+      <div><strong>Телефон:</strong> <a href="tel:{{ object.phone }}">{{ object.phone }}</a></div>
+      {% if object.source %}<div><strong>Источник:</strong> {{ object.source }}</div>{% endif %}
+      {% if object.description %}<div class="mt-2 text-muted">{{ object.description }}</div>{% endif %}
     </div>
   </div>
-  <div class="col-md-8">
+
+  <div class="col-lg-7">
     <div class="card p-3 shadow-sm">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <div class="small text-muted">Мероприятия клиента</div>
+        <div class="small text-muted">Мероприятия</div>
+        <a class="btn btn-primary btn-sm" href="{% url 'calendarapp:event_create' %}?client={{ object.pk }}">+ Добавить</a>
       </div>
-      <table class="table table-sm align-middle">
-        <thead><tr><th>Дата</th><th>Слот</th><th>Зал</th><th>Статус</th><th>Предоплата</th></tr></thead>
-        <tbody>
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr class="text-muted small">
+              <th>Дата</th>
+              <th>Время</th>
+              <th>Зал</th>
+              <th>Статус</th>
+              <th>Предоплата</th>
+            </tr>
+          </thead>
+          <tbody>
           {% for e in events %}
-          <tr>
-                <td><a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.date|date:"d.m.Y" }}</a></td>
-                <td><a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.get_slot_display }}</a></td>
-                <td>{{ e.hall }}</td>
-                <td><span class="badge bg-secondary">{{ e.get_status_display }}</span></td>
-                <td>{{ e.prepayment_amount|default:"0" }}</td>
-              </tr>
-                {% empty %}
-              <tr><td colspan="5" class="text-muted">Нет мероприятий</td></tr>
-         {% endfor %}
-        </tbody>
-      </table>
+            <tr>
+              <td>
+                <a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.date|date:"d.m.Y" }}</a>
+              </td>
+              <td>
+                <a href="{% url 'calendarapp:event_detail' e.pk %}">{{ e.get_slot_display }}</a>
+              </td>
+              <td>{{ e.hall }}</td>
+              <td>
+                <span class="badge
+                  {% if e.status == 'paid' %} bg-success
+                  {% elif e.status == 'confirmed' %} bg-primary
+                  {% elif e.status == 'pending' %} bg-warning text-dark
+                  {% elif e.status == 'canceled' %} bg-danger
+                  {% else %} bg-secondary {% endif %}">
+                  {{ e.get_status_display }}
+                </span>
+              </td>
+              <td>{{ e.prepayment_amount|default:"0" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted">Нет мероприятий</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
-
 {% endblock %}

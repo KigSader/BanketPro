@@ -1,40 +1,45 @@
-{% extends 'base.html' %}
-{% block title %}Мероприятие {{ object.date|date:"d.m.Y" }}{% endblock %}
-{% block content %}
+ {% extends 'base.html' %}
+ {% block title %}Мероприятие {{ object.date|date:"d.m.Y" }}{% endblock %}
+ {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h5 m-0">Мероприятие: {{ object.date|date:"d.m.Y" }} • {{ object.get_slot_display }} • {{ object.hall }}</h1>
-  <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:dashboard' %}">К дашборду</a>
-</div>
+ <div class="d-flex justify-content-between align-items-center mb-3">
+   <h1 class="h5 m-0">Мероприятие: {{ object.date|date:"d.m.Y" }} • {{ object.get_slot_display }} • {{ object.hall }}</h1>
+   <a class="btn btn-outline-secondary btn-sm" href="{% url 'crm:dashboard' %}">К дашборду</a>
+ </div>
 
-<div class="row g-3">
-  <div class="col-md-5">
-    <div class="card p-3 shadow-sm">
-      <div class="small text-muted mb-2">Клиент и параметры</div>
-      <div><strong>{{ object.client.full_name }}</strong> — <a href="tel:{{ object.client.phone }}">{{ object.client.phone }}</a></div>
-      <div class="text-muted small mt-2">Зал: {{ object.hall }}</div>
-      <div class="text-muted small">Гостей: {{ object.guests }}</div>
-      <div class="text-muted small">Статус: {{ object.get_status_display }}</div>
-      <div class="text-muted small">Предоплата: {{ object.prepayment_amount|default:"0" }}</div>
-      <div class="text-muted small">Меню: {% if object.client_menu %}{{ object.client_menu.title }}{% else %}—{% endif %}</div>
-      <div class="text-muted small">Доп.услуги:
-        {% for e in object.extras.all %}{{ e.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
-      </div>
-      {% if object.contract %}
-        <div class="small mt-2"><a href="{{ object.contract.url }}" target="_blank">Договор</a></div>
+ <div class="row g-3">
+   <div class="col-md-5">
+     <div class="card p-3 shadow-sm">
+       <div class="small text-muted mb-2">Клиент и параметры</div>
+        {% if object.responsible %}
+         <div class="text-muted small mb-2">
+          Создал: <strong>{{ object.responsible.get_full_name|default:object.responsible.username }}</strong>
+         </div>
       {% endif %}
-    </div>
-  </div>
+       <div><strong>{{ object.client.full_name }}</strong> — <a href="tel:{{ object.client.phone }}">{{ object.client.phone }}</a></div>
+       <div class="text-muted small mt-2">Зал: {{ object.hall }}</div>
+       <div class="text-muted small">Гостей: {{ object.guests }}</div>
+       <div class="text-muted small">Статус: {{ object.get_status_display }}</div>
+       <div class="text-muted small">Предоплата: {{ object.prepayment_amount|default:"0" }}</div>
+       <div class="text-muted small">Меню: {% if object.client_menu %}{{ object.client_menu.title }}{% else %}—{% endif %}</div>
+       <div class="text-muted small">Доп.услуги:
+         {% for e in object.extras.all %}{{ e.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+       </div>
+       {% if object.contract %}
+         <div class="small mt-2"><a href="{{ object.contract.url }}" target="_blank">Договор</a></div>
+       {% endif %}
+     </div>
+   </div>
 
-  <div class="col-md-7">
-    <div class="card p-3 shadow-sm">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div class="small text-muted">Задачи</div>
-        <a class="btn btn-sm btn-primary" href="{% url 'taskapp:event_task_create' object.pk %}">+ Задача</a>
-      </div>
-      {% include "tasks/_task_inline_list.html" with tasks=object.tasks.all only %}
-    </div>
-  </div>
-</div>
+   <div class="col-md-7">
+     <div class="card p-3 shadow-sm">
+       <div class="d-flex justify-content-between align-items-center mb-2">
+         <div class="small text-muted">Задачи</div>
+-        <a class="btn btn-sm btn-primary" href="{% url 'taskapp:event_task_create' object.pk %}">+ Задача</a>
+       </div>
+       {% include "tasks/_task_inline_list.html" with tasks=object.tasks.all only %}
+     </div>
+   </div>
+ </div>
 
-{% endblock %}
+ {% endblock %}

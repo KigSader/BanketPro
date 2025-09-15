@@ -1,44 +1,78 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block title %}Новое мероприятие{% endblock %}
 {% block content %}
-<h1 class="h5 mb-3">Добавить мероприятие</h1>
-<form method="post" enctype="multipart/form-data" class="card p-3 shadow-sm">{% csrf_token %}
+
+<h1 class="h5 mb-3">Новое мероприятие</h1>
+
+<form method="post" class="card p-3 shadow-sm">
+  {% csrf_token %}
+
   <div class="row g-3">
+    <!-- Клиент -->
     <div class="col-12">
-      <div class="form-check form-switch">
-        {{ form.new_client }} <label class="form-check-label" for="{{ form.new_client.id_for_label }}">Создать нового клиента</label>
-      </div>
+      <div class="small text-muted mb-1">Клиент</div>
     </div>
 
-    <div id="block-existing" class="col-md-6">
-      <label class="form-label">Клиент (поиск)</label>
-      <input type="text" class="form-control" id="clientSearch" placeholder="ФИО или телефон">
-      {{ form.client }}
+    {{ form.existing_client_id }}
+
+    <div class="col-md-6 position-relative">
+      <label class="form-label">ФИО</label>
+      {{ form.new_full_name }}
+      <!-- Контейнер подсказок -->
+      <div id="fio-suggest" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
+      <div class="form-text">Начните вводить ФИО — увидите до 3 подсказок из базы.</div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Телефон</label>
+      {{ form.new_phone }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Источник</label>
+      {{ form.new_source }}
+    </div>
+    <div class="col-12">
+      <label class="form-label">Описание</label>
+      {{ form.new_description }}
     </div>
 
-    <div id="block-new" class="col-12 row g-3" style="display:none">
-      <div class="col-md-6">{{ form.new_full_name.label_tag }} {{ form.new_full_name }}</div>
-      <div class="col-md-6">{{ form.new_phone.label_tag }} {{ form.new_phone }}</div>
-      <div class="col-md-6">{{ form.new_source.label_tag }} {{ form.new_source }}</div>
-      <div class="col-12">{{ form.new_description.label_tag }} {{ form.new_description }}</div>
+    <hr class="mt-2"/>
+
+    <!-- Мероприятие -->
+    <div class="col-md-4">
+      <label class="form-label">Зал</label>
+      {{ form.hall }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Дата</label>
+      {{ form.date }}
+    </div>
+    <div class="col-md-5">
+      <label class="form-label d-block">Время</label>
+      {{ form.slot_choice }}
     </div>
 
-    <div class="col-md-4">{{ form.date.label_tag }} {{ form.date }}</div>
-    <div class="col-md-4">{{ form.slot.label_tag }} {{ form.slot }}</div>
-    <div class="col-md-4">{{ form.slot_full }} {{ form.slot_full.label_tag }}</div>
+    <div class="col-12">
+      <label class="form-label">Название/повод</label>
+      {{ form.title }}
+    </div>
 
-    <div class="col-md-6">{{ form.hall.label_tag }} {{ form.hall }}</div>
-    <div class="col-md-6">{{ form.title.label_tag }} {{ form.title }}</div>
+    <div class="col-md-3">
+      <label class="form-label">Гости</label>
+      {{ form.guests }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Предоплата, ₽</label>
+      {{ form.prepayment_amount }}
+    </div>
 
-    <div class="col-md-4">{{ form.guests.label_tag }} {{ form.guests }}</div>
-    <div class="col-md-4">{{ form.client_menu.label_tag }} {{ form.client_menu }}</div>
-    <div class="col-md-4">{{ form.extras.label_tag }} {{ form.extras }}</div>
-
-    <div class="col-md-6">{{ form.prepayment_amount.label_tag }} {{ form.prepayment_amount }}</div>
-    <div class="col-md-6">{{ form.status.label_tag }} {{ form.status }}</div>
-
-    <div class="col-md-6">{{ form.contract.label_tag }} {{ form.contract }}</div>
-    <div class="col-md-6">{{ form.responsible.label_tag }} {{ form.responsible }}</div>
+    <div class="col-md-6">
+      <label class="form-label">Меню (выбор из добавленных блюд)</label>
+      {{ form.client_menu }}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Доп. услуги</label>
+      {{ form.extras }}
+    </div>
   </div>
 
   <div class="mt-3 d-flex gap-2">
@@ -48,27 +82,64 @@
 </form>
 
 <script>
-const blockNew = document.getElementById('block-new');
-const blockExist = document.getElementById('block-existing');
-function toggleNew(){ const on = document.querySelector('[name="new_client"]').checked; blockNew.style.display = on?'':'none'; blockExist.style.display = on?'none':''; }
-document.querySelector('[name="new_client"]').addEventListener('change', toggleNew); toggleNew();
+(function() {
+  const input = document.getElementById("id_new_full_name");
+  const container = document.getElementById("fio-suggest");
+  const hiddenId = document.getElementById("id_existing_client_id");
+  const phoneInput = document.getElementById("id_new_phone");
+  const sourceSelect = document.getElementById("id_new_source");
+  const descInput = document.getElementById("id_new_description");
 
-const input = document.getElementById('clientSearch'); const select = document.getElementById('id_client');
-if (input){
-  let t=null;
-  input.addEventListener('input', ()=>{
-    clearTimeout(t);
-    t = setTimeout(async ()=>{
-      const q = input.value.trim(); if(!q){ return; }
-      const r = await fetch(`/crm/clients/search?q=${encodeURIComponent(q)}`);
-      const items = await r.json(); select.innerHTML = '';
-      items.forEach(it=>{
-        const opt = document.createElement('option');
-        opt.value = it.id; opt.textContent = `${it.full_name} — ${it.phone}`;
-        select.appendChild(opt);
-      });
-    }, 250);
+  if (!input || !container) return;
+
+  const url = input.getAttribute('data-autocomplete-url');
+  let timer = null;
+
+  function clearSuggest() {
+    container.innerHTML = "";
+    container.style.display = "none";
+  }
+
+  function render(items) {
+    clearSuggest();
+    if (!items.length) return;
+    container.style.display = "block";
+    items.forEach(item => {
+      const a = document.createElement('a');
+      a.href = "javascript:void(0)";
+      a.className = "list-group-item list-group-item-action";
+      a.textContent = item.label + (item.phone ? " — " + item.phone : "");
+      a.onclick = () => {
+        input.value = item.label;
+        hiddenId.value = item.id;
+        if (phoneInput) phoneInput.value = item.phone || "";
+        if (sourceSelect && item.source) sourceSelect.value = item.source;
+        if (descInput) descInput.value = item.description || "";
+        clearSuggest();
+      };
+      container.appendChild(a);
+    });
+  }
+
+  input.addEventListener('input', function() {
+    hiddenId.value = ""; // сбрасываем связку, если пользователь правит ФИО
+    const q = input.value.trim();
+    if (timer) clearTimeout(timer);
+    if (!q) return clearSuggest();
+    timer = setTimeout(() => {
+      fetch(url + "?q=" + encodeURIComponent(q), {headers: {'X-Requested-With':'XMLHttpRequest'}})
+        .then(r => r.json())
+        .then(data => render((data && data.results) || []))
+        .catch(() => clearSuggest());
+    }, 220);
   });
-}
+
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target) && e.target !== input) {
+      clearSuggest();
+    }
+  });
+})();
 </script>
+
 {% endblock %}
