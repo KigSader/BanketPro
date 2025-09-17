@@ -8,7 +8,7 @@ urlpatterns = [
 
     path('crm/', include('crm.urls')),
     path('calendar/', include('calendarapp.urls')),
-    path('menu/', include('menuapp.urls')),
+    path('menu/', include('menu.urls')),
     path('employees/', include('employees.urls')),
     path('warehouse/', include('warehouse.urls')),
     path('expenses/', include('expenses.urls')),

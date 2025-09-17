@@ -1,0 +1,18 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ dish.name }}</h1>
+{% if dish.photo %}<img src="{{ dish.photo.url }}" alt="" style="max-width:320px">{% endif %}
+<p><strong>Группа:</strong> {{ dish.group.name }}</p>
+<p><strong>Стоимость:</strong> {{ dish.price }}</p>
+<p><strong>Состав (текст):</strong><br>{{ dish.composition_text|linebreaks }}</p>
+<h4>Ингредиенты на 1 порцию:</h4>
+<ul>
+  {% for ri in dish.recipe_items.all %}
+    <li>{{ ri.product.name }} — {{ ri.quantity_per_portion }} {{ ri.product.get_unit_display }}</li>
+  {% empty %}
+    <li class="text-muted">Не задано</li>
+  {% endfor %}
+</ul>
+<a class="btn btn-outline-secondary" href="{% url 'menu:dish_edit' dish.id %}">Редактировать</a>
+{% endblock %}

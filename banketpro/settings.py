@@ -19,13 +19,14 @@ INSTALLED_APPS = [
 
     # Apps
     'crm',
-    'menuapp',
+    'menu',
     'employees',
     'warehouse',
     'expenses',
     'stats',
     'settingsapp',
     'taskapp',
+    'serviceapp'
 
 
 ]
@@ -107,3 +108,6 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 дней
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

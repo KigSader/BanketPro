@@ -1,0 +1,24 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Блюда группы: {{ group.name }}</h1>
+<a class="btn btn-primary mb-3" href="{% url 'menu:dish_add_in_group' group.id %}">Добавить блюдо</a>
+<table class="table table-striped">
+  <thead><tr><th>Название</th><th>Стоимость</th><th></th></tr></thead>
+  <tbody>
+  {% for d in dishes %}
+    <tr>
+      <td><a href="{% url 'menu:dish_detail' d.id %}">{{ d.name }}</a></td>
+      <td>{{ d.price }}</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'menu:dish_edit' d.id %}">Редактировать</a>
+        <a class="btn btn-sm btn-outline-danger" href="{% url 'menu:dish_delete' d.id %}">Удалить</a>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="3" class="text-muted">Нет блюд</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<a href="{% url 'menu:group_list' %}">← Назад к группам</a>
+{% endblock %}

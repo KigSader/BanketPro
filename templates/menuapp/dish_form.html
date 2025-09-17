@@ -1,0 +1,24 @@
+
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<h1>{{ dish.pk|default_if_none:"Создать блюдо"|yesno:"Редактировать блюдо,Создать блюдо" }}</h1>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  {{ form.as_p }}
+  <h4 class="mt-4">Структурированный состав (для автоматического списания)</h4>
+  {{ formset.management_form }}
+  <table class="table">
+    <thead><tr><th>Продукт</th><th>Кол-во на порцию</th><th>Удалить</th></tr></thead>
+    <tbody>
+      {% for f in formset %}
+      <tr>
+        <td>{{ f.product }}</td>
+        <td>{{ f.quantity_per_portion }}</td>
+        <td>{{ f.DELETE }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button class="btn btn-primary">Сохранить</button>
+</form>
+{% endblock %}

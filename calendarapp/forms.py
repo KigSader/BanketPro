@@ -1,8 +1,7 @@
-# calendarapp/forms.py
 from django import forms
 from django.core.exceptions import ValidationError
 from django.urls import reverse_lazy
-from django.db.models.fields.related import ManyToManyField
+
 
 from .models import Event
 from crm.models import Client, SOURCE_CHOICES
@@ -16,6 +15,7 @@ SLOT_CHOICES = (
 
 # Соответствие UI-кодов к кодам в модели
 SLOT_MAP = {'day': 'am', 'evening': 'pm'}
+
 
 class EventCreateForm(forms.ModelForm):
     # --- Клиент (виртуальные поля) ---
@@ -44,8 +44,6 @@ class EventCreateForm(forms.ModelForm):
             'title',              # Название/повод
             'guests',             # Кол-во гостей
             'prepayment_amount',  # Предоплата
-            'client_menu',        # Меню (FK)
-            'extras',             # Доп. услуги (M2M)
             # 'contract' — прикрепляется уже на карточке мероприятия
         ]
         widgets = {
@@ -117,10 +115,10 @@ class EventCreateForm(forms.ModelForm):
 
         if client is None:
             client = Client.objects.create(
-                full_name  = cleaned['new_full_name'],
-                phone      = cleaned.get('new_phone') or '',
-                source     = cleaned.get('new_source') or '',
-                description= cleaned.get('new_description') or '',
+                full_name   = cleaned['new_full_name'],
+                phone       = cleaned.get('new_phone') or '',
+                source      = cleaned.get('new_source') or '',
+                description = cleaned.get('new_description') or '',
             )
 
         # 2) Общие данные мероприятия
@@ -132,42 +130,16 @@ class EventCreateForm(forms.ModelForm):
             guests            = cleaned.get('guests') or 0,
             prepayment_amount = cleaned.get('prepayment_amount') or 0,
             responsible       = user,      # кто создал — ответственный
-            # status — оставим дефолт 'draft' из модели
+            # status — остаётся дефолтним (IN_PROGRESS), задаётся в модели
         )
 
         slot_choice = cleaned['slot_choice']
-
-        def _assign_field(e, field_name):
-            """Аккуратно проставляем FK или M2M, если поле есть и не пустое."""
-            if field_name not in self.cleaned_data:
-                return
-            value = self.cleaned_data[field_name]
-            if value in (None, '', []):
-                return
-            try:
-                field = e._meta.get_field(field_name)
-            except Exception:
-                return
-            if isinstance(field, ManyToManyField):
-                if not e.pk:
-                    e.save()
-                rel = getattr(e, field_name, None)
-                if hasattr(rel, 'set'):
-                    rel.set(value)
-            else:
-                setattr(e, field_name, value)
-                if e.pk:
-                    e.save(update_fields=[field_name])
-                else:
-                    e.save()
 
         def _create_event(slot_code: str):
             e = Event(**base_kwargs)
             e.slot = slot_code  # 'am' / 'pm'
             if commit:
                 e.save()
-                _assign_field(e, 'client_menu')
-                _assign_field(e, 'extras')
             return e
 
         if slot_choice == 'full':

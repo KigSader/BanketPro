@@ -2,7 +2,7 @@
 from django.apps import AppConfig
 
 
-class WarehouseappConfig(AppConfig):
+class ServiceappConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'warehouse'
-    verbose_name = 'Склад'
+    name = 'serviceapp'
+    verbose_name = 'Услуги'

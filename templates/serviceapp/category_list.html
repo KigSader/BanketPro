@@ -1,0 +1,22 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Категории услуг</h1>
+<a class="btn btn-primary mb-3" href="{% url 'services:category_add' %}">Добавить категорию</a>
+<table class="table table-striped">
+  <thead><tr><th>Название</th><th></th></tr></thead>
+  <tbody>
+  {% for c in categories %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'services:category_edit' c.id %}">Редактировать</a>
+        <a class="btn btn-sm btn-outline-danger" href="{% url 'services:category_delete' c.id %}">Удалить</a>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="2" class="text-muted">Нет категорий</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

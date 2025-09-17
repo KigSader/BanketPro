@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1 class="h3 mb-3">Новое движение склада</h1>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Продукт</label>
+      {{ form.product|add_class:"form-select" }}
+      {{ form.product.errors }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Изменение кол-ва</label>
+      {{ form.qty_change|add_class:"form-control" }}
+      <div class="form-text">Отрицательное — списание, положительное — приход.</div>
+      {{ form.qty_change.errors }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Тип операции</label>
+      {{ form.kind|add_class:"form-select" }}
+      {{ form.kind.errors }}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Мероприятие (опционально)</label>
+      {{ form.event|add_class:"form-select" }}
+      <div class="form-text">Заполняйте при списаниях/возвратах, связанных с событием.</div>
+      {{ form.event.errors }}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Комментарий</label>
+      {{ form.note|add_class:"form-control" }}
+      {{ form.note.errors }}
+    </div>
+  </div>
+
+  <div class="mt-4 d-flex gap-2">
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <a class="btn btn-secondary" href="{% url 'warehouse:product_list' %}">Отмена</a>
+  </div>
+</form>
+
+{% endblock %}

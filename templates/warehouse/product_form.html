@@ -1,5 +1,58 @@
-{% extends 'base.html' %}{% block title %}Новый товар{% endblock %}{% block content %}
-<h1 class="h4 mb-3">Добавить товар</h1>
-<form method="post" class="card p-3 shadow-sm">{% csrf_token %}{{ form.as_p }}
-  <button class="btn btn-primary">Сохранить</button>
-</form>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+
+<h1 class="h3 mb-3">{{ form.instance.pk|yesno:"Редактировать продукт,Добавить продукт" }}</h1>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Название</label>
+      {{ form.name|add_class:"form-control" }}
+      {{ form.name.errors }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Артикул</label>
+      {{ form.sku|add_class:"form-control" }}
+      {{ form.sku.errors }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Ед. изм.</label>
+      {{ form.unit|add_class:"form-select" }}
+      {{ form.unit.errors }}
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Остаток</label>
+      {{ form.current_qty|add_class:"form-control" }}
+      {{ form.current_qty.errors }}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Мин. остаток</label>
+      {{ form.min_qty|add_class:"form-control" }}
+      {{ form.min_qty.errors }}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Себестоимость за ед.</label>
+      {{ form.cost_per_unit|add_class:"form-control" }}
+      {{ form.cost_per_unit.errors }}
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label d-block">Активен</label>
+      {{ form.is_active }}
+      {{ form.is_active.errors }}
+    </div>
+  </div>
+
+  <div class="mt-4 d-flex gap-2">
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <a class="btn btn-secondary" href="{% url 'warehouse:product_list' %}">Отмена</a>
+  </div>
+</form>
+
+{% endblock %}

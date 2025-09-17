@@ -1,0 +1,9 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Удалить блюдо "{{ object.name }}"?</h1>
+<form method="post">{% csrf_token %}
+  <button class="btn btn-danger">Удалить</button>
+  <a class="btn btn-secondary" href="{% url 'menu:dish_list_in_group' object.group.id %}">Отмена</a>
+</form>
+{% endblock %}
